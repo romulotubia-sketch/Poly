@@ -1,0 +1,6 @@
+{
+  "name": "Pet Haven - 3D Pet Farming Simulator",
+  "description": "A cozy, colorful, low-poly 3D pet farming simulator where you raise magical pets, harvest crops, develop unique active and passive abilities, and expand your farm.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
