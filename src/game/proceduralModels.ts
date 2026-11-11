@@ -923,6 +923,7 @@ export function createTree(type: 'oak' | 'pine' | 'apple' = 'oak'): THREE.Group 
     c3.position.y = 4.7;
     c3.castShadow = true;
     tree.add(c1, c2, c3);
+    tree.userData.foliage = [c1, c2, c3];
   } else {
     // Low-poly fluffy dodecahedron clusters
     const f1 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5, 0), materials.leafGreen);
@@ -935,6 +936,7 @@ export function createTree(type: 'oak' | 'pine' | 'apple' = 'oak'): THREE.Group 
     f3.position.set(-0.5, 3.2, -0.4);
     f3.castShadow = true;
     tree.add(f1, f2, f3);
+    tree.userData.foliage = [f1, f2, f3];
 
     if (type === 'apple') {
       const appleMat = new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.3 });
@@ -1000,23 +1002,51 @@ export function createFenceSegment(): THREE.Group {
   return fence;
 }
 
-// Crop 3D Visualizer with 4 distinct growth stages (Seedling, Growing, Mature, Harvest-Ready)
-export function createCropMesh(cropId: string, progress: number): THREE.Group {
+// Crop 3D Visualizer with 4 distinct growth stages (Seedling, Growing, Mature, Harvested)
+export function createCropMesh(cropId: string, progress: number, isHarvested = false): THREE.Group {
   const group = new THREE.Group();
-  group.name = `crop_${cropId}`;
-  group.userData = { cropId, progress, isCrop: true };
+  group.name = isHarvested ? 'crop_harvested_stubble' : `crop_${cropId}`;
+  group.userData = { cropId, progress, isCrop: true, isHarvested };
 
   const soilMoundMat = new THREE.MeshStandardMaterial({ color: 0x4a2810, roughness: 0.95 });
   const youngGreenMat = new THREE.MeshStandardMaterial({ color: 0x70e000, roughness: 0.6 });
   const lushGreenMat = new THREE.MeshStandardMaterial({ color: 0x38b000, roughness: 0.7 });
   const stemMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.75 });
+  const stubbleMat = new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.9 });
 
-  if (progress < 0.25) {
+  if (isHarvested) {
+    // ----------------------------------------------------
+    // STAGE 4: HARVESTED (Turned soil mound + cut stem stubble & clippings)
+    // ----------------------------------------------------
+    const mound = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.1, 7), soilMoundMat);
+    mound.position.y = 0.05;
+    mound.receiveShadow = true;
+    group.add(mound);
+
+    // 2 short snipped stalks
+    const stubble1 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.12, 5), stubbleMat);
+    stubble1.position.set(-0.06, 0.1, 0.04);
+    stubble1.rotation.z = 0.15;
+    const stubble2 = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.1, 5), stubbleMat);
+    stubble2.position.set(0.07, 0.09, -0.05);
+    stubble2.rotation.x = -0.12;
+
+    // Small cut foliage clippings
+    const cutLeaf = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.08), youngGreenMat);
+    cutLeaf.rotation.x = -Math.PI / 2;
+    cutLeaf.rotation.z = 0.4;
+    cutLeaf.position.set(0.08, 0.07, 0.08);
+
+    group.add(stubble1, stubble2, cutLeaf);
+    return group;
+  }
+
+  if (progress < 0.28) {
     // ----------------------------------------------------
     // STAGE 1: SEEDLING (Tender shoots & miniature cotyledons)
     // ----------------------------------------------------
     // Small soil mound
-    const mound = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.08, 6), soilMoundMat);
+    const mound = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.08, 6), soilMoundMat);
     mound.position.y = 0.04;
     group.add(mound);
 
@@ -1038,11 +1068,11 @@ export function createCropMesh(cropId: string, progress: number): THREE.Group {
     leaf2.rotation.y = -0.3;
 
     group.add(leaf1, leaf2);
-  } else if (progress < 0.75) {
+  } else if (progress < 0.85) {
     // ----------------------------------------------------
     // STAGE 2: GROWING (Branching leafy foliage & unripe bud)
     // ----------------------------------------------------
-    const growthRatio = (progress - 0.25) / 0.5; // 0 to 1
+    const growthRatio = (progress - 0.28) / 0.57; // 0 to 1
     const stalkH = 0.24 + growthRatio * 0.16;
 
     const mainStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, stalkH, 5), stemMat);
@@ -1245,6 +1275,50 @@ export function createCropMesh(cropId: string, progress: number): THREE.Group {
   }
 
   return group;
+}
+
+// Visual 3D collectible prop representing harvested crop that pops and flies to the player
+export function createHarvestItemMesh(cropId: string): THREE.Group {
+  const item = new THREE.Group();
+  item.name = `harvest_item_${cropId}`;
+
+  if (cropId === 'carrot') {
+    const carrotMat = new THREE.MeshStandardMaterial({ color: 0xff7b00, roughness: 0.4 });
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.5, 6), carrotMat);
+    c.rotation.x = Math.PI;
+    const topMat = new THREE.MeshStandardMaterial({ color: 0x38b000, roughness: 0.6 });
+    const top = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), topMat);
+    top.position.y = 0.28;
+    item.add(c, top);
+  } else if (cropId === 'tomato') {
+    const tomatoMat = new THREE.MeshStandardMaterial({ color: 0xe63946, roughness: 0.2 });
+    const tom = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), tomatoMat);
+    const calyx = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.05, 5), new THREE.MeshStandardMaterial({ color: 0x2d6a4f }));
+    calyx.position.y = 0.2;
+    item.add(tom, calyx);
+  } else if (cropId === 'strawberry') {
+    const berryMat = new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.25 });
+    const berry = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 6), berryMat);
+    berry.rotation.x = Math.PI;
+    const top = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.06, 5), new THREE.MeshStandardMaterial({ color: 0x38b000 }));
+    top.position.y = 0.17;
+    item.add(berry, top);
+  } else if (cropId === 'corn') {
+    const cob = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.45, 6), new THREE.MeshStandardMaterial({ color: 0xffd166 }));
+    const husk = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.3, 4), new THREE.MeshStandardMaterial({ color: 0x74c69d }));
+    husk.position.y = -0.1;
+    item.add(cob, husk);
+  } else if (cropId === 'pumpkin') {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 7), new THREE.MeshStandardMaterial({ color: 0xf77f00 }));
+    p.scale.set(1.2, 0.85, 1.2);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.14, 5), new THREE.MeshStandardMaterial({ color: 0x40916c }));
+    stem.position.y = 0.22;
+    item.add(p, stem);
+  } else {
+    const gem = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: 0xffb703 }));
+    item.add(gem);
+  }
+  return item;
 }
 
 // --- PORTAL TO WILD GROUNDS ---

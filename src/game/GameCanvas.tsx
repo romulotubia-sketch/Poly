@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { PetData, FarmPlotState, PlayerStats } from '../types/game';
+import { PetData, FarmPlotState, PlayerStats, GraphicsQuality, PerformanceStatsData } from '../types/game';
 import {
   createPlayerModel,
   createFarmhouse,
@@ -13,6 +13,7 @@ import {
   createQuarryNode,
   createFenceSegment,
   createCropMesh,
+  createHarvestItemMesh,
   createPortalArch,
   createSeedStall,
   createShadowSlime,
@@ -73,6 +74,8 @@ interface GameCanvasProps {
   portalTheme?: PortalTheme;
   isWarping?: boolean;
   onTimePhaseChange?: (phase: TimePhase, timeOfDay: number) => void;
+  graphicsQuality?: GraphicsQuality;
+  onPerfStatsChange?: (stats: PerformanceStatsData) => void;
 }
 
 // Math helpers pre-allocated at module scope to avoid GC inside render loop
@@ -146,9 +149,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   portalTheme = 'normal',
   isWarping = false,
   onTimePhaseChange,
+  graphicsQuality = 'medium',
+  onPerfStatsChange,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const portalRef = useRef<UpgradedPortal | null>(null);
+
+  // References to WebGL resources for dynamic quality changes
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const particleSysRef = useRef<ParticleSystem | null>(null);
+  const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const isSoftwareGlRef = useRef<boolean>(false);
 
   // References to keep state fresh in Three.js tick loop without rebuilding WebGL context
   const stateRef = useRef({
@@ -177,6 +188,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     portalTheme,
     isWarping,
     onTimePhaseChange,
+    graphicsQuality,
+    onPerfStatsChange,
   });
 
   useEffect(() => {
@@ -206,6 +219,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       portalTheme,
       isWarping,
       onTimePhaseChange,
+      graphicsQuality,
+      onPerfStatsChange,
     };
   }, [
     player,
@@ -233,6 +248,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     portalTheme,
     isWarping,
     onTimePhaseChange,
+    graphicsQuality,
+    onPerfStatsChange,
   ]);
 
   useEffect(() => {
@@ -240,6 +257,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       portalRef.current.setTheme(portalTheme);
     }
   }, [portalTheme]);
+
+  // Real-time Graphics Quality adjustments without reloading scene (Requirement 4)
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const particleSys = particleSysRef.current;
+    const sunLight = sunLightRef.current;
+    const isSoftwareGl = isSoftwareGlRef.current;
+    if (!renderer || !particleSys) return;
+
+    // 1. Particle pool limits
+    particleSys.setQuality(graphicsQuality);
+
+    // 2. Pixel ratio / Resolution
+    if (graphicsQuality === 'low' || isSoftwareGl) {
+      renderer.setPixelRatio(1.0);
+    } else if (graphicsQuality === 'medium') {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    } else {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+    }
+
+    if (mountRef.current) {
+      renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
+    }
+
+    // 3. Shadows & Lighting quality
+    if (graphicsQuality === 'low' || isSoftwareGl) {
+      renderer.shadowMap.enabled = false;
+      if (sunLight) sunLight.castShadow = false;
+    } else {
+      renderer.shadowMap.enabled = true;
+      if (sunLight) sunLight.castShadow = true;
+      if (graphicsQuality === 'medium') {
+        renderer.shadowMap.type = THREE.BasicShadowMap;
+      } else {
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      }
+      renderer.shadowMap.needsUpdate = true;
+    }
+  }, [graphicsQuality]);
 
   const lastHandledSkillRef = useRef<number>(0);
 
@@ -265,12 +322,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       alpha: false,
     });
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
+
+    const initQuality = stateRef.current.graphicsQuality || 'medium';
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
-    renderer.shadowMap.enabled = !isSoftwareGl;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Apply initial graphics quality
+    if (initQuality === 'low' || isSoftwareGl) {
+      renderer.setPixelRatio(1.0);
+      renderer.shadowMap.enabled = false;
+    } else if (initQuality === 'medium') {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.BasicShadowMap;
+    } else {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
 
     container.appendChild(renderer.domElement);
 
@@ -296,7 +366,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     const sunLight = new THREE.DirectionalLight(0xfffae0, 1.8);
     sunLight.position.set(25, 38, 20);
-    sunLight.castShadow = !isSoftwareGl;
+    sunLight.castShadow = initQuality !== 'low' && !isSoftwareGl;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
     sunLight.shadow.camera.near = 0.5;
@@ -310,8 +380,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     sunLight.shadow.normalBias = 0.02;
     scene.add(sunLight);
 
+    // Store references for dynamic settings updates
+    rendererRef.current = renderer;
+    sunLightRef.current = sunLight;
+    isSoftwareGlRef.current = isSoftwareGl;
+
     // Particle System
     const particleSys = new ParticleSystem();
+    particleSys.setQuality(initQuality);
+    particleSysRef.current = particleSys;
     scene.add(particleSys.group);
 
     // Environment System (Day/Night, Wind, Swaying Trees, Clouds, Birds, Butterflies, Water)
@@ -336,14 +413,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     farmEnvironmentGroup.add(ground);
 
     // River / Stream cutting through farm side
-    const riverGeo = new THREE.PlaneGeometry(10, 40, 8, 8);
+    const riverGeo = new THREE.PlaneGeometry(10, 40, 16, 24);
     const riverMat = new THREE.MeshStandardMaterial({
       color: 0x38bdf8,
-      roughness: 0.1,
-      metalness: 0.2,
+      roughness: 0.08,
+      metalness: 0.35,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.88,
+      envMapIntensity: 1.5,
     });
+    riverMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = envSystem.grassWindUniforms.uTime;
+      shader.vertexShader = `
+        uniform float uTime;
+        ${shader.vertexShader}
+      `;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `
+        #include <begin_vertex>
+        float wave = sin(uTime * 2.2 + position.x * 0.8 + position.y * 0.5) * 0.02;
+        transformed.z += wave;
+        `
+      );
+    };
     const river = new THREE.Mesh(riverGeo, riverMat);
     river.rotation.x = -Math.PI / 2;
     river.rotation.z = 0.15;
@@ -453,9 +546,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     const turtlePond = new THREE.Group();
     turtlePond.position.set(12, 0, 8);
-    const pondRim = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.0, 0.4, 12), new THREE.MeshStandardMaterial({ color: 0x8d99ae, roughness: 0.9 }));
+    const pondRim = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.0, 0.4, 16), new THREE.MeshStandardMaterial({ color: 0x8d99ae, roughness: 0.9 }));
     pondRim.position.y = 0.2;
-    const pondWater = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.2, 12), new THREE.MeshStandardMaterial({ color: 0x48cae4, transparent: true, opacity: 0.85 }));
+    const pondWaterMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.08,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.88,
+      envMapIntensity: 1.5,
+    });
+    const pondWater = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.2, 16), pondWaterMat);
     pondWater.position.y = 0.3;
     turtlePond.add(pondRim, pondWater);
 
@@ -526,10 +627,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         const cropGroup = new THREE.Group();
         if (plot.cropId) {
-          const cropMesh = createCropMesh(plot.cropId, plot.growProgress);
+          const cropMesh = createCropMesh(plot.cropId, plot.growProgress, false);
           cropMesh.position.y = 0.15;
           cropGroup.add(cropMesh);
           envSystem.registerPlotMesh(cropGroup);
+        } else if (plot.isHarvested) {
+          const harvestedMesh = createCropMesh('harvested', 0, true);
+          harvestedMesh.position.y = 0.15;
+          cropGroup.add(harvestedMesh);
         }
         plotGroup.add(cropGroup);
 
@@ -1333,12 +1438,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 if (dist < 5.5 && plot.cropId && plot.growProgress >= 1.0) {
                   const crop = plot.cropId;
                   plot.cropId = null;
+                  plot.isHarvested = true;
                   plot.plantedAt = null;
                   plot.growProgress = 0;
                   stateRef.current.onAddInventory(crop, 2);
                   const hPos = new THREE.Vector3(plot.x, 0.4, plot.z);
                   particleSys.spawnHarvestPop(hPos, 0xffd166);
                   particleSys.spawnHarvestBurst(hPos);
+                  const itemMesh = createHarvestItemMesh(crop);
+                  particleSys.spawnHarvestFlyItem(hPos, playerPhysics.pos, itemMesh);
+                  particleSys.spawnDamageNumber(hPos, `+2 ${crop.toUpperCase()}`, false, false, 'heal');
                   harvestCount++;
                 }
               });
@@ -1565,8 +1674,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     }
 
+    // Performance monitoring tracking variables
+    let perfLastTimestamp = performance.now();
+    let perfFrameCount = 0;
+    let perfFrameTimeAccum = 0;
+    let loopFrameIndex = 0;
+
     // Main tick loop
     function tick() {
+      const frameStartTime = performance.now();
+      loopFrameIndex++;
       const delta = Math.min(clock.getDelta(), 0.1);
       const now = Date.now();
 
@@ -1669,8 +1786,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Update particle effects
       particleSys.update(delta);
 
-      // Update Atmospheric Environment System (Day/Night, Wind, Swaying Trees, Clouds, Birds, Butterflies, Fireflies)
-      envSystem.update(delta, playerPhysics.pos, stateRef.current.currentLocation, particleSys);
+      // Update Atmospheric Environment System (Day/Night, Wind, Swaying Trees, Crops, Clouds, Birds, Butterflies, Water)
+      envSystem.update(delta, [], stateRef.current.currentLocation, particleSys);
       if (stateRef.current.onTimePhaseChange) {
         stateRef.current.onTimePhaseChange(envSystem.getTimePhase(), envSystem.timeOfDay);
       }
@@ -1762,7 +1879,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // Check character water ripple & splash interaction on pond and river
         if (stateRef.current.currentLocation === 'farm') {
-          envSystem.checkWaterInteraction(playerPhysics.pos, true, particleSys);
+          envSystem.checkWaterInteraction([{ id: 'player', pos: playerPhysics.pos, isMoving: true }], particleSys);
         }
       }
 
@@ -2020,6 +2137,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             },
             delta
           );
+          // Water ripple & splash interaction when pet enters water
+          if (stateRef.current.currentLocation === 'farm' && pet.isFollowing && petSpeed > 0.15) {
+            envSystem.checkWaterInteraction([{ id: pet.id, pos: mesh.position, isMoving: true }], particleSys);
+          }
         }
       });
 
@@ -2135,10 +2256,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           for (let eIdx = activeEnemies.length - 1; eIdx >= 0; eIdx--) {
             const enemy = activeEnemies[eIdx];
             const ePos = enemy.mesh.position;
+            const distToPlayer = ePos.distanceTo(playerPhysics.pos);
+            const isDistant = distToPlayer > 32;
 
-            // Health bar billboard faces camera
-            const hb = enemy.mesh.children.find((c) => c !== enemy.mesh.children[0]);
-            if (hb) hb.rotation.y = camYaw;
+            // Health bar billboard faces camera (only when within 28m to save draw/matrix updates)
+            if (distToPlayer < 28) {
+              const hb = enemy.mesh.children.find((c) => c !== enemy.mesh.children[0]);
+              if (hb) hb.rotation.y = camYaw;
+            }
+
+            // Distant enemy optimization: throttle calculation to alternate frames
+            if (isDistant && ((eIdx + loopFrameIndex) % 2 === 1)) {
+              continue;
+            }
 
             // Hit reaction flash / squash animation
             if (enemy.hitFlashTimer && enemy.hitFlashTimer > 0) {
@@ -2231,17 +2361,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               effectiveSpeed *= enemy.slowFactor || 0.6;
             }
 
-            const distToPlayer = ePos.distanceTo(playerPhysics.pos);
             const attackRange = enemy.isBoss ? 2.6 : 1.7;
+            const moveDelta = effectiveSpeed * delta * (isDistant ? 2 : 1);
 
             if (distToPlayer > attackRange) {
               // Move towards player
               const dir = _vec3A.subVectors(playerPhysics.pos, ePos).normalize();
-              ePos.addScaledVector(dir, effectiveSpeed * delta);
+              ePos.addScaledVector(dir, moveDelta);
               enemy.mesh.rotation.y = Math.atan2(dir.x, dir.z);
 
-              // Lunge / run bounce
-              enemy.mesh.position.y = Math.abs(Math.sin(now * 0.008 * effectiveSpeed)) * 0.15;
+              // Lunge / run bounce (skip for distant enemies to save calculations)
+              if (!isDistant) {
+                enemy.mesh.position.y = Math.abs(Math.sin(now * 0.008 * effectiveSpeed)) * 0.15;
+              } else {
+                enemy.mesh.position.y = 0;
+              }
             } else {
               // Within attack range: attack player on cooldown
               enemy.attackTimer -= delta;
@@ -2473,7 +2607,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 prompt = {
                   text: 'Till Soil Plot',
                   action: () => {
-                    const updated = stateRef.current.farmPlots.map((p) => (p.id === plot.id ? { ...p, tilled: true } : p));
+                    const updated = stateRef.current.farmPlots.map((p) => (p.id === plot.id ? { ...p, tilled: true, isHarvested: false } : p));
                     stateRef.current.onUpdatePlots(updated);
                     rebuildFarmPlotMeshes(updated);
                     soundEngine.playPlantSeed();
@@ -2491,7 +2625,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   action: () => {
                     const crop = plot.cropId!;
                     const updated = stateRef.current.farmPlots.map((p) =>
-                      p.id === plot.id ? { ...p, cropId: null, plantedAt: null, growProgress: 0 } : p
+                      p.id === plot.id ? { ...p, cropId: null, plantedAt: null, growProgress: 0, isHarvested: true } : p
                     );
                     stateRef.current.onUpdatePlots(updated);
                     rebuildFarmPlotMeshes(updated);
@@ -2500,6 +2634,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     const harvestPos = new THREE.Vector3(plot.x, 0.4, plot.z);
                     particleSys.spawnHarvestPop(harvestPos, 0xffd166);
                     particleSys.spawnHarvestBurst(harvestPos);
+                    const itemMesh = createHarvestItemMesh(crop);
+                    particleSys.spawnHarvestFlyItem(harvestPos, playerPhysics.pos, itemMesh);
+                    particleSys.spawnDamageNumber(harvestPos, `+1 ${crop.toUpperCase()} (+20 Gold)`, false, false, 'heal');
                     soundEngine.playHarvest();
                     stateRef.current.onShowMessage(`Harvested fresh ${crop}! (+20 Coins)`);
 
@@ -2614,6 +2751,34 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Render Scene
       renderer.render(scene, camera);
 
+      // Performance Monitor metrics dispatch (every 250ms)
+      const frameEndTime = performance.now();
+      perfFrameTimeAccum += frameEndTime - frameStartTime;
+      perfFrameCount++;
+
+      const perfElapsed = frameEndTime - perfLastTimestamp;
+      if (perfElapsed >= 250) {
+        const computedFps = Math.round((perfFrameCount * 1000) / perfElapsed);
+        const avgFrameTime = Number((perfFrameTimeAccum / perfFrameCount).toFixed(1));
+
+        if (stateRef.current.onPerfStatsChange) {
+          stateRef.current.onPerfStatsChange({
+            fps: computedFps,
+            frameTimeMs: avgFrameTime,
+            activeParticles: particleSys.getActiveCount(),
+            maxParticles: particleSys.getMaxCount(),
+            drawCalls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            activeEnemies: activeEnemies.length,
+            activePets: petMeshMap.size,
+          });
+        }
+
+        perfLastTimestamp = frameEndTime;
+        perfFrameCount = 0;
+        perfFrameTimeAccum = 0;
+      }
+
       if (isSoftwareGl) afterDraw(tick);
       else frameId = requestAnimationFrame(tick);
     }
@@ -2638,6 +2803,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       activeCyclones.forEach((cyc) => {
         scene.remove(cyc.mesh);
       });
+
+      rendererRef.current = null;
+      particleSysRef.current = null;
+      sunLightRef.current = null;
 
       envSystem.dispose();
       particleSys.dispose();

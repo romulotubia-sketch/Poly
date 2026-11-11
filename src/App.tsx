@@ -12,7 +12,7 @@ import { PetEssenceShopModal } from './components/PetEssenceShopModal';
 import { InstancePortalModal } from './components/InstancePortalModal';
 import { InstanceResultModal } from './components/InstanceResultModal';
 import { DuplicateNotificationModal } from './components/DuplicateNotificationModal';
-import { PetData, FarmPlotState, PlayerStats, EssenceShopItem } from './types/game';
+import { PetData, FarmPlotState, PlayerStats, EssenceShopItem, GraphicsQuality, PerformanceStatsData } from './types/game';
 import { INITIAL_PETS, INITIAL_FARM_PLOTS, INITIAL_INVENTORY, DUPLICATE_ESSENCE_VALUES, CROPS } from './game/constants';
 import { soundEngine } from './audio/soundEngine';
 import { computeActiveSkillStats } from './game/combatSkills';
@@ -164,6 +164,49 @@ export default function App() {
 
   const [isZenMode, setIsZenMode] = useState(false);
   const [messageToast, setMessageToast] = useState<string | null>('Welcome to Pet Haven! Use the left joystick to move.');
+
+  // Graphics Quality & Performance Monitoring
+  const [graphicsQuality, setGraphicsQuality] = useState<GraphicsQuality>(() => {
+    try {
+      const saved = localStorage.getItem('pet_haven_graphics_quality');
+      if (saved === 'low' || saved === 'medium' || saved === 'high') return saved;
+    } catch {
+      // ignore
+    }
+    return 'medium';
+  });
+
+  const [showPerfStats, setShowPerfStats] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('pet_haven_show_perf_stats') === 'true';
+    } catch {
+      // ignore
+    }
+    return false;
+  });
+
+  const [perfStats, setPerfStats] = useState<PerformanceStatsData | null>(null);
+
+  const handleSelectQuality = useCallback((q: GraphicsQuality) => {
+    setGraphicsQuality(q);
+    try {
+      localStorage.setItem('pet_haven_graphics_quality', q);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleTogglePerfStats = useCallback(() => {
+    setShowPerfStats((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('pet_haven_show_perf_stats', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   // Fullscreen support
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -349,6 +392,7 @@ export default function App() {
               plantedAt: Date.now(),
               growProgress: 0.05,
               watered: true,
+              isHarvested: false,
             }
           : plot
       )
@@ -575,6 +619,8 @@ export default function App() {
         }}
         portalTheme={portalTheme}
         isWarping={isWarpingTransition}
+        graphicsQuality={graphicsQuality}
+        onPerfStatsChange={setPerfStats}
       />
 
       {/* Main HUD overlay with 5 equipped skill slots and top bar */}
@@ -601,6 +647,9 @@ export default function App() {
         messageToast={messageToast}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
+        perfStats={perfStats}
+        showPerfStats={showPerfStats}
+        graphicsQuality={graphicsQuality}
       />
 
       {/* Mobile touch controls (Virtual Joystick, Action & Jump buttons, Camera turning) */}
@@ -647,6 +696,10 @@ export default function App() {
           onShowMessage={showMessage}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
+          graphicsQuality={graphicsQuality}
+          onSelectQuality={handleSelectQuality}
+          showPerfStats={showPerfStats}
+          onTogglePerfStats={handleTogglePerfStats}
         />
       )}
 

@@ -1,4 +1,16 @@
 export type PetRarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythical';
+export type GraphicsQuality = 'low' | 'medium' | 'high';
+
+export interface PerformanceStatsData {
+  fps: number;
+  frameTimeMs: number;
+  activeParticles: number;
+  maxParticles: number;
+  drawCalls: number;
+  triangles: number;
+  activeEnemies: number;
+  activePets: number;
+}
 
 export interface PetSkill {
   id: string;
@@ -57,6 +69,7 @@ export interface FarmPlotState {
   plantedAt: number | null; // timestamp
   growProgress: number; // 0 to 1
   fertilized?: boolean;
+  isHarvested?: boolean;
 }
 
 export interface InventoryItem {

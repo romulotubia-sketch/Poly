@@ -141,30 +141,6 @@ class SoundEngine {
     });
   }
 
-  public playWaterSplash() {
-    if (!this.enabled) return;
-    this.initCtx();
-    if (!this.ctx || !this.sfxGain) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(320, now);
-    osc.frequency.exponentialRampToValueAtTime(620, now + 0.06);
-    osc.frequency.exponentialRampToValueAtTime(180, now + 0.16);
-
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start();
-    osc.stop(now + 0.18);
-  }
-
   public playPetJoy() {
     if (!this.enabled) return;
     this.initCtx();

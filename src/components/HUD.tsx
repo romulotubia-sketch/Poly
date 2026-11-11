@@ -23,7 +23,7 @@ import {
   Minimize,
   EyeOff,
 } from 'lucide-react';
-import { PetData, PlayerStats } from '../types/game';
+import { PetData, PlayerStats, GraphicsQuality, PerformanceStatsData } from '../types/game';
 
 interface HUDProps {
   player: PlayerStats;
@@ -49,6 +49,9 @@ interface HUDProps {
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   timePhase?: 'morning' | 'day' | 'sunset' | 'night';
+  perfStats?: PerformanceStatsData | null;
+  showPerfStats?: boolean;
+  graphicsQuality?: GraphicsQuality;
 }
 
 const SKILL_ICONS: Record<string, React.FC<{ className?: string }>> = {
@@ -90,6 +93,9 @@ export const HUD: React.FC<HUDProps> = ({
   isFullscreen,
   onToggleFullscreen,
   timePhase = 'day',
+  perfStats = null,
+  showPerfStats = false,
+  graphicsQuality = 'medium',
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
@@ -104,6 +110,57 @@ export const HUD: React.FC<HUDProps> = ({
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none overflow-hidden font-sans">
+      {/* Performance Monitor Floating Overlay (Requirement 5) */}
+      {showPerfStats && perfStats && !isZenMode && (
+        <aside
+          aria-label="Performance Monitor"
+          className="pointer-events-auto absolute top-14 right-2 sm:right-4 z-40 bg-stone-950/90 border border-stone-700/80 rounded-xl px-2.5 py-1.5 shadow-2xl backdrop-blur-sm text-[10px] font-mono flex flex-col gap-0.5 text-stone-200 min-w-[130px]"
+        >
+          <div className="flex items-center justify-between gap-3 font-bold border-b border-stone-800 pb-0.5">
+            <span
+              className={
+                perfStats.fps >= 50
+                  ? 'text-emerald-400'
+                  : perfStats.fps >= 30
+                  ? 'text-amber-400'
+                  : 'text-rose-400'
+              }
+            >
+              ⚡ {perfStats.fps} FPS
+            </span>
+            <span className="text-stone-400 text-[9px]">{perfStats.frameTimeMs} ms</span>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[9px] text-stone-300">
+            <span>Particles:</span>
+            <span className="text-amber-300 font-bold">
+              {perfStats.activeParticles}/{perfStats.maxParticles}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[9px] text-stone-300">
+            <span>Draw Calls:</span>
+            <span className="text-sky-300 font-bold">{perfStats.drawCalls}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[9px] text-stone-300">
+            <span>Triangles:</span>
+            <span className="text-purple-300 font-bold">
+              {(perfStats.triangles / 1000).toFixed(1)}k
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[9px] text-stone-400 border-t border-stone-800/80 pt-0.5 mt-0.5">
+            <span>Enemies / Pets:</span>
+            <span className="text-stone-200 font-bold">
+              {perfStats.activeEnemies} / {perfStats.activePets}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-[8.5px] text-stone-400 pt-0.5">
+            <span>Profile:</span>
+            <span className="uppercase font-bold px-1 rounded bg-stone-800 text-amber-300">
+              {graphicsQuality}
+            </span>
+          </div>
+        </aside>
+      )}
+
       {/* Toast Notification Banner */}
       {messageToast && (
         <div className="pointer-events-auto absolute top-14 left-1/2 -translate-x-1/2 z-50 px-2 max-w-[90vw]">

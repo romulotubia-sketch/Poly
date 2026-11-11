@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Volume2, Music, RotateCcw, Smartphone, Maximize, Check } from 'lucide-react';
+import { X, Volume2, Music, RotateCcw, Smartphone, Maximize, Activity, Zap, ShieldAlert } from 'lucide-react';
 import { soundEngine } from '../audio/soundEngine';
+import { GraphicsQuality } from '../types/game';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -8,6 +9,10 @@ interface SettingsModalProps {
   onShowMessage: (msg: string) => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  graphicsQuality: GraphicsQuality;
+  onSelectQuality: (q: GraphicsQuality) => void;
+  showPerfStats: boolean;
+  onTogglePerfStats: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -16,6 +21,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onShowMessage,
   isFullscreen,
   onToggleFullscreen,
+  graphicsQuality,
+  onSelectQuality,
+  showPerfStats,
+  onTogglePerfStats,
 }) => {
   const [sfxVolume, setSfxVolume] = useState(0.8);
   const [musicPlaying, setMusicPlaying] = useState(true);
@@ -45,8 +54,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex items-center gap-2.5">
             <span className="text-xl">⚙️</span>
             <div>
-              <h2 className="text-base font-bold text-amber-200">Settings & Mobile Guide</h2>
-              <p className="text-[10px] text-stone-400">Audio, display, and touch controls reference</p>
+              <h2 className="text-base font-bold text-amber-200">Settings & Graphics</h2>
+              <p className="text-[10px] text-stone-400">Quality, audio, performance monitor, and controls</p>
             </div>
           </div>
           <button
@@ -59,6 +68,72 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+          {/* Graphics Quality Settings (Requirement 4) */}
+          <div>
+            <h3 className="text-[11px] font-bold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-400" /> Graphics Quality & Performance
+            </h3>
+            <div className="bg-stone-900/70 border border-stone-800 rounded-2xl p-3.5 space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                {(['low', 'medium', 'high'] as GraphicsQuality[]).map((q) => {
+                  const isSelected = graphicsQuality === q;
+                  return (
+                    <button
+                      key={q}
+                      onClick={() => onSelectQuality(q)}
+                      className={`py-2 px-1 rounded-xl font-bold uppercase tracking-wide text-xs transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-amber-600 border-amber-400 text-white shadow-lg shadow-amber-600/30'
+                          : 'bg-stone-800/80 border-stone-700 text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+                      }`}
+                    >
+                      {q}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Quality Description Card */}
+              <div className="text-[11px] text-stone-300 bg-stone-950/60 border border-stone-800/80 rounded-xl p-2.5 leading-relaxed">
+                {graphicsQuality === 'low' && (
+                  <div>
+                    <strong className="text-amber-400">Low Quality:</strong> 1.0x native resolution, minimal shadows, pooled 120 particle cap. Optimized for battery saving and older mobile devices.
+                  </div>
+                )}
+                {graphicsQuality === 'medium' && (
+                  <div>
+                    <strong className="text-amber-400">Medium Quality:</strong> 1.5x resolution, soft shadows, balanced 260 particle cap, standard atmospheric effects. Recommended for most devices.
+                  </div>
+                )}
+                {graphicsQuality === 'high' && (
+                  <div>
+                    <strong className="text-amber-400">High Quality:</strong> 2.0x full resolution, PCF soft shadows, 500 particle cap, enhanced lighting, reflections, and full environmental foliage.
+                  </div>
+                )}
+              </div>
+
+              {/* Performance Monitor Toggle (Requirement 5) */}
+              <div className="flex items-center justify-between pt-1 border-t border-stone-800">
+                <div>
+                  <h4 className="font-bold text-stone-200 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-sky-400" /> Performance Monitor Overlay
+                  </h4>
+                  <p className="text-[10px] text-stone-400">Display real-time FPS, frame time, particles & draw calls</p>
+                </div>
+                <button
+                  onClick={onTogglePerfStats}
+                  className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                    showPerfStats
+                      ? 'bg-sky-600 border-sky-400 text-white'
+                      : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-white'
+                  }`}
+                >
+                  <span>{showPerfStats ? 'Enabled' : 'Hidden'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Display & Fullscreen */}
           <div>
             <h3 className="text-[11px] font-bold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -71,7 +146,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
               <button
                 onClick={onToggleFullscreen}
-                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow"
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow cursor-pointer"
               >
                 <Maximize className="w-3.5 h-3.5" />
                 <span>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
