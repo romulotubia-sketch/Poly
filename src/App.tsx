@@ -16,6 +16,8 @@ import { PetData, FarmPlotState, PlayerStats, EssenceShopItem } from './types/ga
 import { INITIAL_PETS, INITIAL_FARM_PLOTS, INITIAL_INVENTORY, DUPLICATE_ESSENCE_VALUES, CROPS } from './game/constants';
 import { soundEngine } from './audio/soundEngine';
 import { computeActiveSkillStats } from './game/combatSkills';
+import { PortalTheme } from './game/portalSystem';
+import { TimePhase } from './game/environmentSystem';
 
 const SAVE_KEY = 'pet_haven_saved_game_v2';
 
@@ -129,6 +131,8 @@ export default function App() {
 
   // Location State ('farm' or 'wild_grounds')
   const [currentLocation, setCurrentLocation] = useState<'farm' | 'wild_grounds'>('farm');
+  const [portalTheme, setPortalTheme] = useState<PortalTheme>('normal');
+  const [isWarpingTransition, setIsWarpingTransition] = useState<boolean>(false);
 
   // Instance wave tracking info
   const [waveInfo, setWaveInfo] = useState<{
@@ -397,18 +401,68 @@ export default function App() {
     }
   };
 
-  // Entering Wild Grounds
-  const handleEnterInstance = () => {
-    setCurrentLocation('wild_grounds');
-    setPlayer((prev) => ({ ...prev, health: prev.maxHealth || 100 }));
+  // Entering Wild Grounds with Attuned Portal Theme
+  const handleEnterInstance = (theme: PortalTheme = portalTheme) => {
+    // 1. Save current farm state
+    try {
+      localStorage.setItem(
+        SAVE_KEY,
+        JSON.stringify({
+          player,
+          pets,
+          farmPlots,
+          savedAt: Date.now(),
+        })
+      );
+    } catch (e) {
+      console.warn('Failed to save farm state before entering instance', e);
+    }
+
+    setPortalTheme(theme);
     setShowPortalModal(false);
+    setIsWarpingTransition(true);
+    soundEngine.playPortalWarp();
+
+    // Smooth transition sequence avoiding abrupt scene changes
+    window.setTimeout(() => {
+      setCurrentLocation('wild_grounds');
+      setPlayer((prev) => ({ ...prev, health: prev.maxHealth || 100 }));
+
+      window.setTimeout(() => {
+        setIsWarpingTransition(false);
+      }, 350);
+    }, 450);
   };
 
   // Returning to Farm from Wild Grounds
   const handleReturnToFarm = () => {
-    setCurrentLocation('farm');
-    setShowResultModal(false);
-    setInstanceResultData(null);
+    // Save state before leaving
+    try {
+      localStorage.setItem(
+        SAVE_KEY,
+        JSON.stringify({
+          player,
+          pets,
+          farmPlots,
+          savedAt: Date.now(),
+        })
+      );
+    } catch (e) {
+      console.warn('Failed to save state on leaving instance', e);
+    }
+
+    setIsWarpingTransition(true);
+    soundEngine.playPortalWarp();
+
+    window.setTimeout(() => {
+      setCurrentLocation('farm');
+      setShowResultModal(false);
+      setInstanceResultData(null);
+
+      window.setTimeout(() => {
+        setIsWarpingTransition(false);
+      }, 350);
+    }, 450);
   };
 
   // Instance Victory Handler
@@ -519,6 +573,8 @@ export default function App() {
           setActivePlotForSeedPicker(plotId);
           setShowSeedPickerModal(true);
         }}
+        portalTheme={portalTheme}
+        isWarping={isWarpingTransition}
       />
 
       {/* Main HUD overlay with 5 equipped skill slots and top bar */}
@@ -637,9 +693,41 @@ export default function App() {
       {showPortalModal && (
         <InstancePortalModal
           player={player}
+          currentTheme={portalTheme}
+          onSelectTheme={setPortalTheme}
           onClose={() => setShowPortalModal(false)}
           onEnterInstance={handleEnterInstance}
         />
+      )}
+
+      {/* Dimensional Portal Warp Transition Overlay */}
+      {isWarpingTransition && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center transition-all duration-300">
+          <div
+            className={`absolute inset-0 animate-pulse ${
+              portalTheme === 'special'
+                ? 'bg-amber-950/70'
+                : portalTheme === 'expert'
+                ? 'bg-rose-950/70'
+                : portalTheme === 'advanced'
+                ? 'bg-purple-950/70'
+                : 'bg-sky-950/70'
+            } backdrop-blur-md`}
+          />
+          <div className="relative flex flex-col items-center gap-3">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-cyan-400 border-t-transparent animate-spin flex items-center justify-center shadow-[0_0_50px_rgba(56,189,248,0.8)]">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-4 border-purple-400 border-b-transparent animate-spin duration-700 shadow-inner" />
+            </div>
+            <div className="text-center space-y-1">
+              <span className="text-xs sm:text-sm font-black tracking-widest text-white uppercase drop-shadow-md">
+                Dimensional Rift Transition
+              </span>
+              <p className="text-[11px] text-indigo-200 font-semibold">
+                {currentLocation === 'farm' ? 'Entering Wild Grounds...' : 'Returning to Pet Haven Farm...'}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Instance Victory / Defeat Result Modal */}

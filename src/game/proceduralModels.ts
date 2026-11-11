@@ -1000,103 +1000,247 @@ export function createFenceSegment(): THREE.Group {
   return fence;
 }
 
-// Crop 3D Visualizer depending on growth stage (0.0 to 1.0)
+// Crop 3D Visualizer with 4 distinct growth stages (Seedling, Growing, Mature, Harvest-Ready)
 export function createCropMesh(cropId: string, progress: number): THREE.Group {
   const group = new THREE.Group();
+  group.name = `crop_${cropId}`;
+  group.userData = { cropId, progress, isCrop: true };
 
-  if (progress < 0.3) {
-    // Sprout stage: 2 small green leaves
-    const leafGeo = new THREE.ConeGeometry(0.08, 0.16, 4);
-    const leaf1 = new THREE.Mesh(leafGeo, materials.leafGreen);
-    leaf1.position.set(0.04, 0.08, 0);
-    leaf1.rotation.z = -0.3;
+  const soilMoundMat = new THREE.MeshStandardMaterial({ color: 0x4a2810, roughness: 0.95 });
+  const youngGreenMat = new THREE.MeshStandardMaterial({ color: 0x70e000, roughness: 0.6 });
+  const lushGreenMat = new THREE.MeshStandardMaterial({ color: 0x38b000, roughness: 0.7 });
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.75 });
 
-    const leaf2 = leaf1.clone();
-    leaf2.position.set(-0.04, 0.08, 0);
-    leaf2.rotation.z = 0.3;
+  if (progress < 0.25) {
+    // ----------------------------------------------------
+    // STAGE 1: SEEDLING (Tender shoots & miniature cotyledons)
+    // ----------------------------------------------------
+    // Small soil mound
+    const mound = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.08, 6), soilMoundMat);
+    mound.position.y = 0.04;
+    group.add(mound);
+
+    // Main sprout stem
+    const sproutStem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.16, 5), youngGreenMat);
+    sproutStem.position.y = 0.09;
+    group.add(sproutStem);
+
+    // 2 opposite cotyledon seed leaves
+    const leafGeo = new THREE.ConeGeometry(0.06, 0.14, 4);
+    const leaf1 = new THREE.Mesh(leafGeo, youngGreenMat);
+    leaf1.position.set(0.035, 0.14, 0);
+    leaf1.rotation.z = -0.65;
+    leaf1.rotation.y = 0.3;
+
+    const leaf2 = new THREE.Mesh(leafGeo, youngGreenMat);
+    leaf2.position.set(-0.035, 0.14, 0);
+    leaf2.rotation.z = 0.65;
+    leaf2.rotation.y = -0.3;
+
     group.add(leaf1, leaf2);
-  } else if (progress < 0.8) {
-    // Growing stage: bushier foliage
-    const stalkGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.35, 5);
-    const stalk = new THREE.Mesh(stalkGeo, materials.leafGreen);
-    stalk.position.y = 0.18;
-    group.add(stalk);
+  } else if (progress < 0.75) {
+    // ----------------------------------------------------
+    // STAGE 2: GROWING (Branching leafy foliage & unripe bud)
+    // ----------------------------------------------------
+    const growthRatio = (progress - 0.25) / 0.5; // 0 to 1
+    const stalkH = 0.24 + growthRatio * 0.16;
 
-    const bushGeo = new THREE.DodecahedronGeometry(0.22, 0);
-    const bush = new THREE.Mesh(bushGeo, materials.leafGreen);
-    bush.position.y = 0.35;
-    group.add(bush);
+    const mainStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, stalkH, 5), stemMat);
+    mainStalk.position.y = stalkH / 2;
+    group.add(mainStalk);
+
+    // Bushy foliage clusters
+    const foliageCluster = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.18 + growthRatio * 0.08, 0),
+      lushGreenMat
+    );
+    foliageCluster.position.y = stalkH + 0.06;
+    group.add(foliageCluster);
+
+    // Side leaves
+    for (let i = 0; i < 3; i++) {
+      const sideLeaf = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 4), youngGreenMat);
+      const ang = (i * Math.PI * 2) / 3;
+      sideLeaf.position.set(Math.cos(ang) * 0.1, stalkH * 0.55, Math.sin(ang) * 0.1);
+      sideLeaf.rotation.z = 0.5;
+      sideLeaf.rotation.y = ang;
+      group.add(sideLeaf);
+    }
+
+    // Small unripe green produce buds
+    const unripeMat = new THREE.MeshStandardMaterial({ color: 0x9ef01a, roughness: 0.5 });
+    if (cropId === 'carrot') {
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 4), unripeMat);
+      tip.rotation.x = Math.PI;
+      tip.position.set(0, 0.08, 0.06);
+      group.add(tip);
+    } else if (cropId === 'tomato' || cropId === 'strawberry') {
+      const bud = new THREE.Mesh(new THREE.SphereGeometry(0.07, 5, 5), unripeMat);
+      bud.position.set(0.08, stalkH * 0.7, 0.06);
+      group.add(bud);
+    } else if (cropId === 'corn') {
+      const babyCob = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.18, 5), unripeMat);
+      babyCob.position.set(0.08, stalkH * 0.6, 0);
+      babyCob.rotation.z = 0.3;
+      group.add(babyCob);
+    } else if (cropId === 'pumpkin') {
+      const babyPumpkin = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), unripeMat);
+      babyPumpkin.scale.set(1.2, 0.8, 1.2);
+      babyPumpkin.position.set(0.1, 0.1, 0.1);
+      group.add(babyPumpkin);
+    }
   } else {
-    // Mature stage: full crop ready for harvest with sparkling golden aura!
-    const stalkGeo = new THREE.CylinderGeometry(0.05, 0.06, 0.45, 5);
-    const stalk = new THREE.Mesh(stalkGeo, materials.leafGreen);
-    stalk.position.y = 0.22;
-    group.add(stalk);
+    // ----------------------------------------------------
+    // STAGE 3 & 4: MATURE / HARVEST-READY
+    // ----------------------------------------------------
+    const mainStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.45, 5), stemMat);
+    mainStalk.position.y = 0.22;
+    group.add(mainStalk);
 
-    const bush = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3, 0), materials.leafGreen);
-    bush.position.y = 0.45;
+    const bush = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3, 0), lushGreenMat);
+    bush.position.y = 0.44;
     group.add(bush);
 
     if (cropId === 'carrot') {
-      const carrotMat = new THREE.MeshStandardMaterial({ color: 0xff7b00, roughness: 0.5 });
-      const carrot = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 5), carrotMat);
+      // Lush feathered fern fronds + bright orange carrot top protruding
+      const carrotMat = new THREE.MeshStandardMaterial({ color: 0xff7b00, roughness: 0.45 });
+      const carrot = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.38, 6), carrotMat);
       carrot.rotation.x = Math.PI;
-      carrot.position.set(0, 0.25, 0.12);
+      carrot.position.set(0, 0.22, 0.08);
       group.add(carrot);
+
+      for (let f = 0; f < 3; f++) {
+        const frond = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.25, 4), youngGreenMat);
+        const ang = (f * Math.PI * 2) / 3;
+        frond.position.set(Math.cos(ang) * 0.12, 0.48, Math.sin(ang) * 0.12);
+        frond.rotation.z = 0.4;
+        frond.rotation.y = ang;
+        group.add(frond);
+      }
     } else if (cropId === 'tomato') {
-      const tomatoMat = new THREE.MeshStandardMaterial({ color: 0xe63946, roughness: 0.35 });
-      const stemMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f });
+      const tomatoMat = new THREE.MeshStandardMaterial({ color: 0xe63946, roughness: 0.25 });
+      const calyxMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.6 });
+
+      // Sturdy garden trellis stake
+      const stakeMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 });
+      const stake = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.75, 0.04), stakeMat);
+      stake.position.set(-0.08, 0.36, -0.05);
+      group.add(stake);
+
       for (let i = 0; i < 3; i++) {
-        const tom = new THREE.Mesh(new THREE.SphereGeometry(0.13, 6, 6), tomatoMat);
+        const tom = new THREE.Mesh(new THREE.SphereGeometry(0.13, 7, 7), tomatoMat);
         const ang = (i * Math.PI * 2) / 3;
-        tom.position.set(Math.cos(ang) * 0.14, 0.32 + (i % 2) * 0.08, Math.sin(ang) * 0.14);
-        const calyx = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.05, 4), stemMat);
+        tom.position.set(Math.cos(ang) * 0.16, 0.34 + (i % 2) * 0.1, Math.sin(ang) * 0.16);
+
+        // Star calyx
+        const calyx = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.04, 5), calyxMat);
         calyx.position.set(0, 0.13, 0);
         tom.add(calyx);
         group.add(tom);
       }
     } else if (cropId === 'strawberry') {
-      const berryMat = new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.3 });
-      const b1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12, 0), berryMat);
-      b1.position.set(0.12, 0.38, 0.15);
-      const b2 = b1.clone();
-      b2.position.set(-0.12, 0.35, -0.1);
-      group.add(b1, b2);
+      const berryMat = new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.28 });
+      const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+      const centerMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.3 });
+
+      // 3 plump red strawberries
+      for (let b = 0; b < 3; b++) {
+        const ang = (b * Math.PI * 2) / 3;
+        const berry = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.22, 5), berryMat);
+        berry.rotation.x = Math.PI * 0.85;
+        berry.position.set(Math.cos(ang) * 0.16, 0.22 + (b % 2) * 0.06, Math.sin(ang) * 0.16);
+        group.add(berry);
+      }
+
+      // Small white strawberry blossom flower
+      const flower = new THREE.Mesh(new THREE.CircleGeometry(0.07, 5), flowerMat);
+      flower.position.set(0, 0.52, 0.1);
+      flower.rotation.x = -0.5;
+      const center = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 4), centerMat);
+      center.position.z = 0.02;
+      flower.add(center);
+      group.add(flower);
     } else if (cropId === 'corn') {
-      const cornMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.4 });
+      const cornMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.35 });
       const huskMat = new THREE.MeshStandardMaterial({ color: 0x74c69d, roughness: 0.8 });
-      // Tall stalk
-      const tallStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.85, 5), materials.leafGreen);
-      tallStalk.position.y = 0.42;
+      const silkMat = new THREE.MeshStandardMaterial({ color: 0xb5838d, roughness: 0.6 });
+
+      // Tall sturdy jointed maize stalk
+      const tallStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.95, 6), stemMat);
+      tallStalk.position.y = 0.48;
       group.add(tallStalk);
-      // Corn cobs
-      const cob1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.32, 6), cornMat);
-      cob1.rotation.z = 0.4;
-      cob1.position.set(0.15, 0.48, 0);
-      const husk1 = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28, 4), huskMat);
+
+      // Arching ribbon leaves
+      for (let l = 0; l < 4; l++) {
+        const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.01), lushGreenMat);
+        const lAng = (l * Math.PI) / 2;
+        leaf.position.set(Math.cos(lAng) * 0.14, 0.4 + l * 0.1, Math.sin(lAng) * 0.14);
+        leaf.rotation.z = 0.6;
+        leaf.rotation.y = lAng;
+        group.add(leaf);
+      }
+
+      // 2 plump ears of corn with silks and peeling husks
+      const cob1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.095, 0.34, 6), cornMat);
+      cob1.rotation.z = 0.45;
+      cob1.position.set(0.16, 0.52, 0);
+
+      const husk1 = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.28, 4), huskMat);
       husk1.position.set(0.04, -0.06, 0);
       cob1.add(husk1);
+
+      const silk1 = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 4), silkMat);
+      silk1.position.set(0, 0.2, 0);
+      cob1.add(silk1);
+
       const cob2 = cob1.clone();
-      cob2.rotation.z = -0.4;
-      cob2.position.set(-0.15, 0.58, 0);
+      cob2.rotation.z = -0.45;
+      cob2.position.set(-0.16, 0.62, 0);
       group.add(cob1, cob2);
     } else if (cropId === 'pumpkin') {
-      const pumpkinMat = new THREE.MeshStandardMaterial({ color: 0xf77f00, roughness: 0.5 });
-      const pStemMat = new THREE.MeshStandardMaterial({ color: 0x40916c });
-      const pumpkin = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 7), pumpkinMat);
-      pumpkin.scale.set(1.25, 0.8, 1.25);
-      pumpkin.position.set(0, 0.24, 0);
-      const pStem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.14, 5), pStemMat);
+      const pumpkinMat = new THREE.MeshStandardMaterial({ color: 0xf77f00, roughness: 0.48 });
+      const pStemMat = new THREE.MeshStandardMaterial({ color: 0x40916c, roughness: 0.7 });
+
+      // Broad lobed creeping vine leaves
+      for (let v = 0; v < 3; v++) {
+        const vLeaf = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), lushGreenMat);
+        vLeaf.scale.set(1.4, 0.3, 1.4);
+        const ang = (v * Math.PI * 2) / 3;
+        vLeaf.position.set(Math.cos(ang) * 0.32, 0.06, Math.sin(ang) * 0.32);
+        group.add(vLeaf);
+      }
+
+      // Large ribbed pumpkin
+      const pumpkin = new THREE.Mesh(new THREE.SphereGeometry(0.3, 9, 8), pumpkinMat);
+      pumpkin.scale.set(1.25, 0.85, 1.25);
+      pumpkin.position.set(0, 0.25, 0);
+
+      const pStem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.055, 0.16, 5), pStemMat);
       pStem.position.set(0, 0.24, 0);
-      pStem.rotation.z = 0.2;
+      pStem.rotation.z = 0.25;
       pumpkin.add(pStem);
       group.add(pumpkin);
     } else {
       // Generic fallback crop
       const genericMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.4 });
-      const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 6), genericMat);
-      fruit.position.set(0, 0.4, 0);
+      const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 6), genericMat);
+      fruit.position.set(0, 0.42, 0);
       group.add(fruit);
+    }
+
+    // Ready-to-Harvest Golden Aura Ring when progress >= 1.0
+    if (progress >= 1.0) {
+      const readyGlowMat = new THREE.MeshBasicMaterial({
+        color: 0xffd166,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.55,
+      });
+      const aura = new THREE.Mesh(new THREE.RingGeometry(0.32, 0.45, 8), readyGlowMat);
+      aura.rotation.x = -Math.PI / 2;
+      aura.position.y = 0.02;
+      aura.name = 'ready_aura';
+      group.add(aura);
     }
   }
 

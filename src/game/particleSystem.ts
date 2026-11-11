@@ -796,6 +796,187 @@ export class ParticleSystem {
     }
   }
 
+  // --- PORTAL PARTICLE SYSTEMS ---
+  public spawnPortalIdleMote(portalPos: THREE.Vector3, colorHex: number) {
+    const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.85 });
+    const mesh = new THREE.Mesh(this.sparkGeo, mat);
+    const radius = 1.3 + Math.random() * 0.8;
+    const angle = Math.random() * Math.PI * 2;
+    mesh.position.set(
+      portalPos.x + Math.cos(angle) * radius,
+      portalPos.y + 1.8 + (Math.random() - 0.5) * 1.6,
+      portalPos.z + Math.sin(angle) * radius * 0.4
+    );
+    mesh.scale.set(0.65, 0.65, 0.65);
+    this.group.add(mesh);
+
+    // Spirals gently upwards towards apex or center
+    this.particles.push({
+      mesh,
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 0.3, Math.random() * 0.6 + 0.4, (Math.random() - 0.5) * 0.3),
+      life: 0,
+      maxLife: 1.2 + Math.random() * 0.6,
+      scaleDelta: -0.5,
+      rotDelta: new THREE.Vector3(Math.random() * 3, Math.random() * 3, 0),
+    });
+  }
+
+  public spawnPortalProximityAura(portalPos: THREE.Vector3, colorHex: number) {
+    const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.9 });
+    for (let i = 0; i < 3; i++) {
+      const mesh = new THREE.Mesh(this.starGeo, mat);
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.6 + Math.random() * 1.5;
+      mesh.position.set(
+        portalPos.x + Math.cos(angle) * radius,
+        portalPos.y + 1.2 + Math.random() * 2.2,
+        portalPos.z + Math.sin(angle) * radius * 0.35 + 0.2
+      );
+      mesh.scale.set(0.7, 0.7, 0.7);
+      this.group.add(mesh);
+
+      this.particles.push({
+        mesh,
+        velocity: new THREE.Vector3((Math.random() - 0.5) * 0.4, Math.random() * 1.2 + 0.6, (Math.random() - 0.5) * 0.4),
+        life: 0,
+        maxLife: 0.85 + Math.random() * 0.4,
+        scaleDelta: -0.3,
+        rotDelta: new THREE.Vector3(Math.random() * 5, Math.random() * 5, 0),
+      });
+    }
+  }
+
+  public spawnPortalWarpBurst(portalPos: THREE.Vector3, colorHex: number) {
+    const count = 36;
+    for (let i = 0; i < count; i++) {
+      const angle = (i * Math.PI * 2) / count + (Math.random() - 0.5) * 0.2;
+      const speed = 4.0 + Math.random() * 6.0;
+      const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.95 });
+      const isCone = Math.random() < 0.5;
+      const mesh = new THREE.Mesh(isCone ? this.flameGeo : this.sparkGeo, mat);
+      mesh.position.set(portalPos.x, portalPos.y + 3.0, portalPos.z + 0.2);
+      mesh.rotation.z = angle;
+
+      const vel = new THREE.Vector3(
+        Math.cos(angle) * speed,
+        (Math.random() - 0.5) * 4.0 + 1.5,
+        Math.sin(angle) * (speed * 0.4)
+      );
+
+      this.group.add(mesh);
+      this.particles.push({
+        mesh,
+        velocity: vel,
+        life: 0,
+        maxLife: 0.75 + Math.random() * 0.35,
+        scaleDelta: -0.5,
+        rotDelta: new THREE.Vector3(Math.random() * 8, Math.random() * 8, 0),
+      });
+    }
+  }
+
+  // Water Ripple on Pond & River
+  public spawnWaterRipple(position: THREE.Vector3, initialRadius = 0.4) {
+    const rippleMat = new THREE.MeshBasicMaterial({
+      color: 0x90e0ef,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const ring = new THREE.Mesh(this.ringGeo, rippleMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(position.x, position.y + 0.04, position.z);
+    ring.scale.set(initialRadius, initialRadius, 1);
+
+    this.group.add(ring);
+    this.particles.push({
+      mesh: ring,
+      velocity: new THREE.Vector3(0, 0, 0),
+      life: 0,
+      maxLife: 0.85,
+      scaleDelta: 2.8,
+    });
+  }
+
+  // Water Splash Droplets
+  public spawnWaterSplash(position: THREE.Vector3) {
+    for (let i = 0; i < 7; i++) {
+      const drop = new THREE.Mesh(this.sparkGeo, this.waterMat);
+      drop.position.set(
+        position.x + (Math.random() - 0.5) * 0.3,
+        position.y + 0.1,
+        position.z + (Math.random() - 0.5) * 0.3
+      );
+      drop.scale.set(0.6, 0.6, 0.6);
+
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.0 + Math.random() * 1.5;
+      const vel = new THREE.Vector3(
+        Math.cos(angle) * speed,
+        2.2 + Math.random() * 1.5,
+        Math.sin(angle) * speed
+      );
+
+      this.group.add(drop);
+      this.particles.push({
+        mesh: drop,
+        velocity: vel,
+        life: 0,
+        maxLife: 0.6,
+        scaleDelta: -0.4,
+      });
+    }
+  }
+
+  // Enhanced Celebratory Crop Harvest Popping Burst
+  public spawnHarvestPop(position: THREE.Vector3, colorHex = 0xffd166) {
+    // 1. Expanding golden shockwave ring
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const ring = new THREE.Mesh(this.ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(position.x, position.y + 0.1, position.z);
+
+    this.group.add(ring);
+    this.particles.push({
+      mesh: ring,
+      velocity: new THREE.Vector3(0, 0.3, 0),
+      life: 0,
+      maxLife: 0.7,
+      scaleDelta: 3.2,
+    });
+
+    // 2. Bursting colorful stars & sparkles
+    const starMat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.95 });
+    for (let i = 0; i < 16; i++) {
+      const star = new THREE.Mesh(this.starGeo, starMat);
+      star.position.set(position.x, position.y + 0.3, position.z);
+      star.scale.set(0.85, 0.85, 0.85);
+
+      const angle = (i * Math.PI * 2) / 16 + (Math.random() - 0.5) * 0.2;
+      const speed = 1.8 + Math.random() * 2.2;
+      const vel = new THREE.Vector3(
+        Math.cos(angle) * speed,
+        3.2 + Math.random() * 2.5,
+        Math.sin(angle) * speed
+      );
+
+      this.group.add(star);
+      this.particles.push({
+        mesh: star,
+        velocity: vel,
+        life: 0,
+        maxLife: 0.85,
+        scaleDelta: -0.6,
+        rotDelta: new THREE.Vector3(Math.random() * 6, Math.random() * 6, 0),
+      });
+    }
+  }
+
   public update(delta: number) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];

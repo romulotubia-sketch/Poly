@@ -28,6 +28,19 @@ import { ParticleSystem } from './particleSystem';
 import { soundEngine } from '../audio/soundEngine';
 import { INSTANCE_WAVES } from './constants';
 import { computeActiveSkillStats } from './combatSkills';
+import {
+  PlayerAnimator,
+  PetAnimator,
+  PetFollowingController,
+  CharacterAnimState,
+} from './characterAnimator';
+import {
+  createUpgradedPortal,
+  UpgradedPortal,
+  PortalTheme,
+  PORTAL_THEMES,
+} from './portalSystem';
+import { EnvironmentSystem, TimePhase } from './environmentSystem';
 
 interface JoystickVector {
   x: number;
@@ -57,6 +70,9 @@ interface GameCanvasProps {
   onOpenSeedShop: () => void;
   onOpenPortalModal: () => void;
   onOpenSeedPicker: (plotId: number) => void;
+  portalTheme?: PortalTheme;
+  isWarping?: boolean;
+  onTimePhaseChange?: (phase: TimePhase, timeOfDay: number) => void;
 }
 
 // Math helpers pre-allocated at module scope to avoid GC inside render loop
@@ -127,8 +143,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onOpenSeedShop,
   onOpenPortalModal,
   onOpenSeedPicker,
+  portalTheme = 'normal',
+  isWarping = false,
+  onTimePhaseChange,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<UpgradedPortal | null>(null);
 
   // References to keep state fresh in Three.js tick loop without rebuilding WebGL context
   const stateRef = useRef({
@@ -154,6 +174,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     onOpenPortalModal,
     onOpenSeedPicker,
     isZenMode,
+    portalTheme,
+    isWarping,
+    onTimePhaseChange,
   });
 
   useEffect(() => {
@@ -180,6 +203,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       onOpenPortalModal,
       onOpenSeedPicker,
       isZenMode,
+      portalTheme,
+      isWarping,
+      onTimePhaseChange,
     };
   }, [
     player,
@@ -204,7 +230,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     onOpenPortalModal,
     onOpenSeedPicker,
     isZenMode,
+    portalTheme,
+    isWarping,
+    onTimePhaseChange,
   ]);
+
+  useEffect(() => {
+    if (portalRef.current && portalTheme) {
+      portalRef.current.setTheme(portalTheme);
+    }
+  }, [portalTheme]);
 
   const lastHandledSkillRef = useRef<number>(0);
 
@@ -279,6 +314,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const particleSys = new ParticleSystem();
     scene.add(particleSys.group);
 
+    // Environment System (Day/Night, Wind, Swaying Trees, Clouds, Birds, Butterflies, Water)
+    const envSystem = new EnvironmentSystem(scene, sunLight, hemiLight, isSoftwareGl);
+
     // ==========================================
     // 1. FARM ENVIRONMENT GROUP
     // ==========================================
@@ -312,6 +350,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     river.position.set(16, 0.02, 0);
     river.receiveShadow = true;
     farmEnvironmentGroup.add(river);
+    envSystem.registerRiverWater(river);
 
     // Wooden Bridge across river
     const bridge = new THREE.Group();
@@ -382,6 +421,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const tree = createTree(type);
       tree.position.set(x, 0, z);
       farmEnvironmentGroup.add(tree);
+      envSystem.registerTree(tree);
     });
 
     // Quarry Crystal Boulders
@@ -418,7 +458,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const pondWater = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.2, 12), new THREE.MeshStandardMaterial({ color: 0x48cae4, transparent: true, opacity: 0.85 }));
     pondWater.position.y = 0.3;
     turtlePond.add(pondRim, pondWater);
+
+    // Small animated surface ripples on Turtle Pond
+    const pondRippleRingMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
+    });
+    const pondRipple = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.82, 16), pondRippleRingMat);
+    pondRipple.rotation.x = -Math.PI / 2;
+    pondRipple.position.y = 0.32;
+    turtlePond.add(pondRipple);
+
     farmEnvironmentGroup.add(turtlePond);
+    envSystem.registerPondWater(pondWater);
 
     // --- SEED SHOPKEEPER STALL ON FARM ---
     const seedStall = createSeedStall();
@@ -426,11 +480,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     seedStall.rotation.y = -Math.PI / 4;
     farmEnvironmentGroup.add(seedStall);
 
-    // --- PORTAL TO WILD GROUNDS ON FARM ---
-    const { group: portalGroup, vortex: portalVortex } = createPortalArch();
-    portalGroup.position.set(-12, 0, -10);
-    portalGroup.rotation.y = Math.PI / 6;
-    farmEnvironmentGroup.add(portalGroup);
+    // --- PORTAL TO WILD GROUNDS ON FARM (UPGRADED MAGICAL PORTAL) ---
+    const upgradedPortal = createUpgradedPortal(stateRef.current.portalTheme || 'normal');
+    upgradedPortal.group.position.set(-12, 0, -10);
+    upgradedPortal.group.rotation.y = Math.PI / 6;
+    farmEnvironmentGroup.add(upgradedPortal.group);
+    portalRef.current = upgradedPortal;
 
     // --- FARM PLOTS MESHES ---
     const plotMeshMap = new Map<number, { group: THREE.Group; dirt: THREE.Mesh; cropGroup: THREE.Group }>();
@@ -447,6 +502,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         gardenPlotsGroup.remove(gardenPlotsGroup.children[0]);
       }
       plotMeshMap.clear();
+      envSystem.clearPlotMeshes();
 
       currentPlots.forEach((plot) => {
         const plotGroup = new THREE.Group();
@@ -473,6 +529,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const cropMesh = createCropMesh(plot.cropId, plot.growProgress);
           cropMesh.position.y = 0.15;
           cropGroup.add(cropMesh);
+          envSystem.registerPlotMesh(cropGroup);
         }
         plotGroup.add(cropGroup);
 
@@ -798,6 +855,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let bearCheatDeathUsed = false;
     let slimeCheatDeathUsed = false;
 
+    // Animation Systems & Controllers
+    const playerAnimator = new PlayerAnimator();
+    const petAnimator = new PetAnimator();
+    const petFollowingController = new PetFollowingController();
+
+    let playerLandingTimer = 0;
+    let playerDamageTimer = 0;
+    let playerStunTimer = 0;
+    let playerAttackTimer = 0;
+    let isPlayerVictory = false;
+    let isPlayerDefeat = false;
+    let currentSkillCasting: {
+      petId: string;
+      phase: 'anticipation' | 'execution' | 'recovery';
+      timer: number;
+    } | null = null;
+
+    interface PetAnimRuntimeState {
+      currentSpeed: number;
+      velocity: THREE.Vector3;
+      distToTarget: number;
+      isCastingSkill: boolean;
+      skillPhase: 'anticipation' | 'execution' | 'recovery';
+      skillTimer: number;
+      damageTimer: number;
+      stunTimer: number;
+    }
+    const petAnimStateMap = new Map<string, PetAnimRuntimeState>();
+
     // Follower Pet Meshes
     const petMeshMap = new Map<string, PetMeshGroup>();
     stateRef.current.pets.forEach((pet) => {
@@ -805,6 +891,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       petMesh.position.set(Math.random() * 4 - 2, 0, Math.random() * 4 - 2);
       scene.add(petMesh);
       petMeshMap.set(pet.id, petMesh);
+
+      petAnimStateMap.set(pet.id, {
+        currentSpeed: 0,
+        velocity: new THREE.Vector3(),
+        distToTarget: 0,
+        isCastingSkill: false,
+        skillPhase: 'anticipation',
+        skillTimer: 0,
+        damageTimer: 0,
+        stunTimer: 0,
+      });
     });
 
     // Touch & Mouse controls listeners for camera drag
@@ -881,6 +978,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let growCheckTimer = 0;
     let lastHandledJump = 0;
     let lastLocation = stateRef.current.currentLocation;
+    let wasNearPortal = false;
+    let wasWarping = false;
 
     // Software WebGL pacing helper
     function afterDraw(cb: () => void) {
@@ -901,6 +1000,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // --- SKILL EXECUTION IN 3D WORLD & INSTANCE COMBAT ---
     function executePetSkill(petId: string) {
+      currentSkillCasting = {
+        petId,
+        phase: 'anticipation',
+        timer: 0.22,
+      };
+      const pAnimState = petAnimStateMap.get(petId);
+      if (pAnimState) {
+        pAnimState.isCastingSkill = true;
+        pAnimState.skillPhase = 'anticipation';
+        pAnimState.skillTimer = 0.22;
+      }
+
       const pPos = playerPhysics.pos;
       const inWild = stateRef.current.currentLocation === 'wild_grounds';
       const pet = stateRef.current.pets.find((p) => p.id === petId);
@@ -1225,8 +1336,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   plot.plantedAt = null;
                   plot.growProgress = 0;
                   stateRef.current.onAddInventory(crop, 2);
-                  stateRef.current.onUpdatePlayer((prev) => ({ ...prev, gold: prev.gold + 30 }));
-                  particleSys.spawnHarvestBurst(new THREE.Vector3(plot.x, 0.5, plot.z));
+                  const hPos = new THREE.Vector3(plot.x, 0.4, plot.z);
+                  particleSys.spawnHarvestPop(hPos, 0xffd166);
+                  particleSys.spawnHarvestBurst(hPos);
                   harvestCount++;
                 }
               });
@@ -1462,6 +1574,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const currentLoc = stateRef.current.currentLocation;
       if (currentLoc !== lastLocation) {
         lastLocation = currentLoc;
+        isPlayerVictory = false;
+        isPlayerDefeat = false;
+        playerDamageTimer = 0;
+        playerLandingTimer = 0;
+        currentSkillCasting = null;
+
         if (currentLoc === 'wild_grounds') {
           farmEnvironmentGroup.visible = false;
           instanceEnvironmentGroup.visible = true;
@@ -1488,11 +1606,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           instanceEnvironmentGroup.visible = false;
           playerPhysics.pos.set(-11, 0, -8); // spawn outside portal on farm
           instanceActive = false;
-          scene.background = new THREE.Color(skyColor);
-          scene.fog = new THREE.Fog(skyColor, 35, 105);
           sunLight.color.setHex(0xfffae0);
           hemiLight.color.setHex(0xe0f2fe);
         }
+
+        // Reposition follower pets smoothly around spawn position
+        petMeshMap.forEach((mesh) => {
+          mesh.position.set(
+            playerPhysics.pos.x + (Math.random() - 0.5) * 3,
+            0,
+            playerPhysics.pos.z - 2 + (Math.random() - 0.5) * 2
+          );
+        });
       }
 
       // Check for incoming skill cast requests from HUD
@@ -1506,11 +1631,49 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Windmill blade spin
       windmillBlades.rotation.z += delta * 0.8;
 
-      // Portal energy vortex rotation
-      portalVortex.rotation.z += delta * 1.5;
+      // Wild Grounds Upgraded Portal Animation & Particle FX
+      if (portalRef.current) {
+        const portalObj = portalRef.current;
+        const portalPos = portalObj.group.position;
+        const distToPortal = Math.hypot(portalPos.x - playerPhysics.pos.x, portalPos.z - playerPhysics.pos.z);
+        const activeTheme = portalObj.currentTheme;
+        const themeHex = PORTAL_THEMES[activeTheme]?.particleColor ?? 0x38bdf8;
+
+        // Check if warp transition just triggered
+        if (stateRef.current.isWarping && !wasWarping) {
+          wasWarping = true;
+          portalObj.triggerWarpAnimation(() => {});
+          particleSys.spawnPortalWarpBurst(portalPos, themeHex);
+        } else if (!stateRef.current.isWarping && wasWarping) {
+          wasWarping = false;
+        }
+
+        portalObj.update(delta, distToPortal, Boolean(stateRef.current.isWarping));
+
+        // Ambient particles when on the farm
+        if (stateRef.current.currentLocation === 'farm') {
+          if (distToPortal < 4.8) {
+            // Proximity aura - extra swirling motes
+            if (Math.random() < 0.35) {
+              particleSys.spawnPortalProximityAura(portalPos, themeHex);
+            }
+          } else if (distToPortal < 16.0) {
+            // Subtle idle floating motes
+            if (Math.random() < 0.16) {
+              particleSys.spawnPortalIdleMote(portalPos, themeHex);
+            }
+          }
+        }
+      }
 
       // Update particle effects
       particleSys.update(delta);
+
+      // Update Atmospheric Environment System (Day/Night, Wind, Swaying Trees, Clouds, Birds, Butterflies, Fireflies)
+      envSystem.update(delta, playerPhysics.pos, stateRef.current.currentLocation, particleSys);
+      if (stateRef.current.onTimePhaseChange) {
+        stateRef.current.onTimePhaseChange(envSystem.getTimePhase(), envSystem.timeOfDay);
+      }
 
       // Handle mobile camera turn buttons
       if (stateRef.current.camTurnDelta !== 0) {
@@ -1589,30 +1752,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           playerPhysics.pos.setLength(maxDist);
         }
 
-        // Animate legs and arms walking
-        playerPhysics.walkCycle += delta * moveSpeed * 2.2;
-        const legAngle = Math.sin(playerPhysics.walkCycle) * 0.6;
-        if (playerMesh.userData.leftLeg) playerMesh.userData.leftLeg.rotation.x = legAngle;
-        if (playerMesh.userData.rightLeg) playerMesh.userData.rightLeg.rotation.x = -legAngle;
-        if (playerMesh.userData.leftArm) playerMesh.userData.leftArm.rotation.x = -legAngle * 0.8;
-        if (playerMesh.userData.rightArm) playerMesh.userData.rightArm.rotation.x = legAngle * 0.8;
-        if (playerMesh.userData.torso) playerMesh.userData.torso.position.y = 0.72 + Math.abs(Math.sin(playerPhysics.walkCycle * 2)) * 0.04;
-
-        // Footstep audio
+        // Footstep audio during movement
         footstepTimer += delta;
-        if (footstepTimer > 0.32) {
+        const footstepInterval = moveSpeed > 5.5 ? 0.24 : 0.35;
+        if (footstepTimer > footstepInterval) {
           soundEngine.playFootstep();
           footstepTimer = 0;
         }
-      } else {
-        // Idle animation
-        playerPhysics.walkCycle += delta * 1.5;
-        const breath = Math.sin(playerPhysics.walkCycle) * 0.03;
-        if (playerMesh.userData.leftLeg) playerMesh.userData.leftLeg.rotation.x *= 0.8;
-        if (playerMesh.userData.rightLeg) playerMesh.userData.rightLeg.rotation.x *= 0.8;
-        if (playerMesh.userData.leftArm) playerMesh.userData.leftArm.rotation.x *= 0.8;
-        if (playerMesh.userData.rightArm) playerMesh.userData.rightArm.rotation.x *= 0.8;
-        if (playerMesh.userData.torso) playerMesh.userData.torso.position.y = 0.72 + breath;
+
+        // Check character water ripple & splash interaction on pond and river
+        if (stateRef.current.currentLocation === 'farm') {
+          envSystem.checkWaterInteraction(playerPhysics.pos, true, particleSys);
+        }
       }
 
       // Jumping & Gravity
@@ -1623,8 +1774,63 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           playerPhysics.pos.y = 0;
           playerPhysics.velY = 0;
           playerPhysics.isGrounded = true;
+          playerLandingTimer = 0.18; // Trigger landing impact squash
+          soundEngine.playFootstep();
         }
       }
+
+      // Decrement player reaction timers
+      if (playerLandingTimer > 0) playerLandingTimer -= delta;
+      if (playerDamageTimer > 0) playerDamageTimer -= delta;
+      if (playerStunTimer > 0) playerStunTimer -= delta;
+      if (playerAttackTimer > 0) playerAttackTimer -= delta;
+
+      // Update skill casting state machine for player
+      if (currentSkillCasting) {
+        currentSkillCasting.timer -= delta;
+        if (currentSkillCasting.timer <= 0) {
+          if (currentSkillCasting.phase === 'anticipation') {
+            currentSkillCasting.phase = 'execution';
+            currentSkillCasting.timer = 0.35;
+          } else if (currentSkillCasting.phase === 'execution') {
+            currentSkillCasting.phase = 'recovery';
+            currentSkillCasting.timer = 0.18;
+          } else {
+            currentSkillCasting = null;
+          }
+        }
+      }
+
+      // Unified procedural player animation update across all 12 states
+      const isJumping = !playerPhysics.isGrounded && playerPhysics.velY > 0.5;
+      const isFalling = !playerPhysics.isGrounded && playerPhysics.velY < -0.5;
+      playerAnimator.update(
+        playerMesh,
+        {
+          position: playerPhysics.pos,
+          velocity: isMoving ? _vec3Cam.clone().multiplyScalar(moveSpeed * Math.min(inputLen, 1)) : new THREE.Vector3(),
+          horizontalSpeed: isMoving ? moveSpeed * Math.min(inputLen, 1) : 0,
+          isGrounded: playerPhysics.isGrounded,
+          isJumping,
+          isFalling,
+          isLanding: playerPhysics.isGrounded && playerLandingTimer > 0,
+          landingTimer: Math.max(0, playerLandingTimer / 0.18),
+          isAttacking: playerAttackTimer > 0,
+          attackTimer: playerAttackTimer,
+          isCastingSkill: currentSkillCasting !== null,
+          skillId: currentSkillCasting?.petId,
+          skillPhase: currentSkillCasting?.phase || 'anticipation',
+          skillTimer: currentSkillCasting?.timer || 0,
+          isTakingDamage: playerDamageTimer > 0,
+          damageTimer: playerDamageTimer,
+          isStunned: playerStunTimer > 0,
+          stunTimer: playerStunTimer,
+          isVictory: isPlayerVictory,
+          isDefeat: isPlayerDefeat,
+          walkCycle: playerPhysics.walkCycle,
+        },
+        delta
+      );
 
       playerMesh.position.copy(playerPhysics.pos);
       playerMesh.rotation.y = playerPhysics.rotY;
@@ -1713,39 +1919,107 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       _vec3Cam.set(playerPhysics.pos.x, playerPhysics.pos.y + 1.2, playerPhysics.pos.z);
       camera.lookAt(_vec3Cam);
 
-      // Pet Following/Wandering
-      stateRef.current.pets.forEach((pet) => {
+      // Pet Following, Flocking, Obstacle Avoidance & Personality Animations
+      const allPets = stateRef.current.pets;
+      const followingPets = allPets.filter((p) => p.isFollowing);
+      const followingMeshes = followingPets.map((p) => petMeshMap.get(p.id)).filter(Boolean) as PetMeshGroup[];
+
+      allPets.forEach((pet, overallIdx) => {
         const mesh = petMeshMap.get(pet.id);
         if (!mesh) return;
 
-        mesh.userData.animTime += delta;
-        const anim = mesh.userData.animTime;
+        mesh.userData.animTime = (mesh.userData.animTime || 0) + delta;
+
+        let pState = petAnimStateMap.get(pet.id);
+        if (!pState) {
+          pState = {
+            currentSpeed: 0,
+            velocity: new THREE.Vector3(),
+            distToTarget: 0,
+            isCastingSkill: false,
+            skillPhase: 'anticipation',
+            skillTimer: 0,
+            damageTimer: 0,
+            stunTimer: 0,
+          };
+          petAnimStateMap.set(pet.id, pState);
+        }
+
+        // Skill casting timers for pet
+        if (pState.isCastingSkill) {
+          pState.skillTimer -= delta;
+          if (pState.skillTimer <= 0) {
+            if (pState.skillPhase === 'anticipation') {
+              pState.skillPhase = 'execution';
+              pState.skillTimer = 0.35;
+            } else if (pState.skillPhase === 'execution') {
+              pState.skillPhase = 'recovery';
+              pState.skillTimer = 0.2;
+            } else {
+              pState.isCastingSkill = false;
+            }
+          }
+        }
+
+        if (pState.damageTimer > 0) pState.damageTimer -= delta;
+        if (pState.stunTimer > 0) pState.stunTimer -= delta;
+
+        let petVel = pState.velocity;
+        let petSpeed = 0;
+        let distToTarget = 0;
 
         if (pet.isFollowing) {
-          const distToPlayer = mesh.position.distanceTo(playerPhysics.pos);
-          const idealDist = 2.4;
+          const followSlotIdx = followingPets.findIndex((p) => p.id === pet.id);
+          const followResult = petFollowingController.updatePetPosition(
+            mesh,
+            playerPhysics.pos,
+            playerPhysics.rotY,
+            followSlotIdx >= 0 ? followSlotIdx : 0,
+            followingMeshes,
+            currentLoc === 'wild_grounds',
+            delta
+          );
+          petVel = followResult.velocity;
+          petSpeed = followResult.speed;
+          distToTarget = followResult.distToTarget;
+          pState.currentSpeed = petSpeed;
+          pState.velocity.copy(petVel);
+          pState.distToTarget = distToTarget;
+        } else {
+          // Pet is resting in farm habitat or idle spot
+          pState.currentSpeed = 0;
+          pState.velocity.set(0, 0, 0);
+        }
 
-          if (distToPlayer > idealDist) {
-            const dir = _vec3A.subVectors(playerPhysics.pos, mesh.position).normalize();
-            mesh.position.addScaledVector(dir, Math.min(moveSpeed * 1.1, distToPlayer * 3.5) * delta);
-            mesh.rotation.y = Math.atan2(dir.x, dir.z);
-
-            const trot = Math.sin(anim * 12);
-            if (mesh.userData.legs) {
-              mesh.userData.legs.forEach((leg, idx) => {
-                leg.rotation.x = trot * (idx % 2 === 0 ? 0.6 : -0.6);
-              });
-            }
-            if (mesh.userData.tail) mesh.userData.tail.rotation.y = Math.sin(anim * 14) * 0.5;
-            if (mesh.userData.wings) {
-              mesh.userData.wings[0].rotation.z = -Math.abs(Math.sin(anim * 12)) * 0.8;
-              mesh.userData.wings[1].rotation.z = Math.abs(Math.sin(anim * 12)) * 0.8;
-            }
-          } else {
-            if (mesh.userData.legs) mesh.userData.legs.forEach((leg) => (leg.rotation.x *= 0.8));
-            if (mesh.userData.tail) mesh.userData.tail.rotation.y = Math.sin(anim * 4) * 0.2;
-            mesh.position.y = Math.sin(anim * 2.5) * 0.04;
-          }
+        // Distance culling for performance: skip micro limb calculations if > 50m away
+        const distToCamera = mesh.position.distanceTo(camera.position);
+        if (distToCamera < 50.0) {
+          petAnimator.update(
+            mesh,
+            {
+              petId: pet.id,
+              species: pet.species,
+              position: mesh.position,
+              velocity: petVel,
+              speed: petSpeed,
+              isGrounded: true,
+              isFollowing: pet.isFollowing,
+              targetPos: playerPhysics.pos,
+              distToTarget,
+              isCastingSkill: pState.isCastingSkill,
+              skillPhase: pState.skillPhase,
+              skillTimer: pState.skillTimer,
+              isTakingDamage: pState.damageTimer > 0,
+              damageTimer: pState.damageTimer,
+              isStunned: pState.stunTimer > 0,
+              stunTimer: pState.stunTimer,
+              isVictory: isPlayerVictory,
+              isDefeat: isPlayerDefeat,
+              animTime: mesh.userData.animTime,
+              slotIndex: overallIdx,
+            },
+            delta
+          );
         }
       });
 
@@ -2055,6 +2329,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 incomingDmg = Math.round(incomingDmg);
 
                 if (incomingDmg > 0) {
+                  playerDamageTimer = 0.25;
                   particleSys.spawnDamageNumber(playerPhysics.pos, incomingDmg, false, true);
                   stateRef.current.onUpdatePlayer((prev) => {
                     const curHp = prev.health ?? prev.maxHealth ?? 100;
@@ -2084,6 +2359,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
                       // Player defeat!
                       instanceActive = false;
+                      isPlayerDefeat = true;
                       soundEngine.playDefeat();
                       stateRef.current.onInstanceDefeat({
                         wavesCleared: currentWaveIndex,
@@ -2121,6 +2397,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             } else {
               // VICTORY! All 10 Waves cleared!
               instanceActive = false;
+              isPlayerVictory = true;
               soundEngine.playVictory();
               stateRef.current.onInstanceVictory({
                 wavesCleared: 10,
@@ -2162,11 +2439,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // 1. Check Portal to Wild Grounds (-12, 0, -10)
         const distToPortal = Math.hypot(-12 - pPos.x, -10 - pPos.z);
-        if (distToPortal < 3.5) {
+        if (distToPortal < 4.5) {
+          if (!wasNearPortal) {
+            wasNearPortal = true;
+            soundEngine.playPortalHum();
+          }
+          const themeName = PORTAL_THEMES[stateRef.current.portalTheme || 'normal']?.name || 'Wild';
           prompt = {
-            text: 'Enter Wild Grounds (Portal)',
+            text: `Enter Wild Grounds (${themeName} Portal)`,
             action: () => stateRef.current.onOpenPortalModal(),
           };
+        } else {
+          wasNearPortal = false;
         }
 
         // 2. Check Barnaby's Seed Stall (7, 0, -2)
@@ -2213,7 +2497,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                     rebuildFarmPlotMeshes(updated);
                     stateRef.current.onAddInventory(crop, 1);
                     stateRef.current.onUpdatePlayer((prev) => ({ ...prev, gold: prev.gold + 20 }));
-                    particleSys.spawnHarvestBurst(new THREE.Vector3(plot.x, 0.5, plot.z));
+                    const harvestPos = new THREE.Vector3(plot.x, 0.4, plot.z);
+                    particleSys.spawnHarvestPop(harvestPos, 0xffd166);
+                    particleSys.spawnHarvestBurst(harvestPos);
                     soundEngine.playHarvest();
                     stateRef.current.onShowMessage(`Harvested fresh ${crop}! (+20 Coins)`);
 
@@ -2313,6 +2599,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               );
               stateRef.current.onUpdatePlots(updated);
               rebuildFarmPlotMeshes(updated);
+              envSystem.timeOfDay = 0.12;
+              envSystem.applyDayNightLighting(0.12);
               stateRef.current.onShowMessage('A new sunny morning begins at Pet Haven! (Health restored)');
             },
           };
@@ -2351,6 +2639,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         scene.remove(cyc.mesh);
       });
 
+      envSystem.dispose();
       particleSys.dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) {

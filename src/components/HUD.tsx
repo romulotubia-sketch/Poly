@@ -48,6 +48,7 @@ interface HUDProps {
   messageToast: string | null;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  timePhase?: 'morning' | 'day' | 'sunset' | 'night';
 }
 
 const SKILL_ICONS: Record<string, React.FC<{ className?: string }>> = {
@@ -88,6 +89,7 @@ export const HUD: React.FC<HUDProps> = ({
   messageToast,
   isFullscreen,
   onToggleFullscreen,
+  timePhase = 'day',
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
@@ -146,8 +148,31 @@ export const HUD: React.FC<HUDProps> = ({
                 <h1 className="text-[11px] font-black tracking-wide text-emerald-300 leading-tight">
                   {currentLocation === 'wild_grounds' ? 'WILD GROUNDS' : 'PET HAVEN'}
                 </h1>
-                <div className="text-[9px] text-emerald-100/90 flex items-center gap-1 font-medium">
-                  <Calendar className="w-2.5 h-2.5 text-emerald-400" /> Day {player.day}
+                <div className="text-[9px] text-emerald-100/90 flex items-center gap-1.5 font-medium">
+                  <span className="flex items-center gap-0.5">
+                    <Calendar className="w-2.5 h-2.5 text-emerald-400" /> Day {player.day}
+                  </span>
+                  {currentLocation === 'farm' && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-md font-bold text-[8.5px] border ${
+                        timePhase === 'morning'
+                          ? 'bg-rose-950/80 text-rose-200 border-rose-500/40'
+                          : timePhase === 'sunset'
+                          ? 'bg-amber-950/80 text-amber-200 border-amber-500/40'
+                          : timePhase === 'night'
+                          ? 'bg-indigo-950/90 text-indigo-200 border-indigo-400/50'
+                          : 'bg-sky-950/80 text-sky-200 border-sky-400/40'
+                      }`}
+                    >
+                      {timePhase === 'morning'
+                        ? '🌅 Morning'
+                        : timePhase === 'sunset'
+                        ? '🌇 Sunset'
+                        : timePhase === 'night'
+                        ? '🌙 Night'
+                        : '☀️ Day'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
