@@ -82,6 +82,19 @@ export interface InventoryItem {
   sellPrice?: number;
 }
 
+export interface NourishmentBonuses {
+  carrotsConsumed: number;
+  tomatoesConsumed: number;
+  strawberriesConsumed: number;
+  cornConsumed: number;
+  pumpkinsConsumed: number;
+  maxHpBonus: number;        // up to +100 Max HP (+0.1 per carrot)
+  attackDamagePct: number;   // up to +20% (+0.1% per tomato)
+  critChancePct: number;     // up to +10% (+0.1% per strawberry)
+  moveSpeedPct: number;      // up to +10% (+0.1% per corn)
+  defensePct: number;        // up to +20% (+0.1% per pumpkin)
+}
+
 export interface PlayerStats {
   gold: number;
   petEssence: number; // Pet Essence currency from duplicate conversions
@@ -95,6 +108,7 @@ export interface PlayerStats {
   equippedSkillSlots: (string | null)[]; // up to 5 pet IDs
   highestWaveCleared: number; // Instance progression record
   totalInstancesCleared: number;
+  nourishment?: NourishmentBonuses;
 }
 
 export interface EssenceShopItem {

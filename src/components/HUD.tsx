@@ -36,8 +36,11 @@ interface HUDProps {
   onOpenSettings: () => void;
   onOpenSeedShop?: () => void;
   onOpenEssenceShop?: () => void;
+  onOpenNourishment?: () => void;
   onLeaveInstance?: () => void;
-  currentLocation?: 'farm' | 'wild_grounds';
+  onLeavePetDen?: () => void;
+  onEnterPetDen?: () => void;
+  currentLocation?: 'farm' | 'wild_grounds' | 'pet_den';
   currentWave?: number;
   waveTitle?: string;
   totalWaves?: number;
@@ -80,7 +83,10 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenSettings,
   onOpenSeedShop,
   onOpenEssenceShop,
+  onOpenNourishment,
   onLeaveInstance,
+  onLeavePetDen,
+  onEnterPetDen,
   currentLocation = 'farm',
   currentWave = 1,
   waveTitle = '',
@@ -200,16 +206,22 @@ export const HUD: React.FC<HUDProps> = ({
           {/* Left: App Title Badge, Location & Following Pet Pill */}
           <div className="flex items-center gap-2">
             <div className="bg-emerald-950/85 border border-emerald-600/40 rounded-xl px-2.5 py-1.5 text-white shadow flex items-center gap-2">
-              <span className="text-sm">{currentLocation === 'wild_grounds' ? '⚔️' : '🐾'}</span>
+              <span className="text-sm">
+                {currentLocation === 'wild_grounds' ? '⚔️' : currentLocation === 'pet_den' ? '🏡' : '🐾'}
+              </span>
               <div>
                 <h1 className="text-[11px] font-black tracking-wide text-emerald-300 leading-tight">
-                  {currentLocation === 'wild_grounds' ? 'WILD GROUNDS' : 'PET HAVEN'}
+                  {currentLocation === 'wild_grounds'
+                    ? 'WILD GROUNDS'
+                    : currentLocation === 'pet_den'
+                    ? 'PET SANCTUARY'
+                    : 'PET HAVEN'}
                 </h1>
                 <div className="text-[9px] text-emerald-100/90 flex items-center gap-1.5 font-medium">
                   <span className="flex items-center gap-0.5">
                     <Calendar className="w-2.5 h-2.5 text-emerald-400" /> Day {player.day}
                   </span>
-                  {currentLocation === 'farm' && (
+                  {(currentLocation === 'farm' || currentLocation === 'pet_den') && (
                     <span
                       className={`px-1.5 py-0.2 rounded-md font-bold text-[8.5px] border ${
                         timePhase === 'morning'
@@ -306,6 +318,29 @@ export const HUD: React.FC<HUDProps> = ({
               </button>
             )}
 
+            {/* Farm -> Pet Den quick button */}
+            {currentLocation === 'farm' && onEnterPetDen && (
+              <button
+                onClick={onEnterPetDen}
+                className="bg-teal-800/85 active:bg-teal-700 text-teal-100 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-teal-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                title="Enter Pet Sanctuary"
+              >
+                <span>🏡</span>
+                <span>Pet Den</span>
+              </button>
+            )}
+
+            {/* Pet Den Return to Farm Button */}
+            {currentLocation === 'pet_den' && onLeavePetDen && (
+              <button
+                onClick={onLeavePetDen}
+                className="bg-emerald-800 active:bg-emerald-700 text-white font-bold text-xs px-2.5 py-1.5 rounded-xl border border-emerald-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                title="Return to Farm"
+              >
+                <span>🌾 Farm</span>
+              </button>
+            )}
+
             {/* Wild Grounds Leave Button */}
             {currentLocation === 'wild_grounds' && onLeaveInstance && (
               <button
@@ -313,6 +348,18 @@ export const HUD: React.FC<HUDProps> = ({
                 className="bg-rose-800 active:bg-rose-700 text-white font-bold text-xs px-2.5 py-1.5 rounded-xl border border-rose-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
               >
                 <span>🏃 Return</span>
+              </button>
+            )}
+
+            {/* Nourishment Button */}
+            {onOpenNourishment && (
+              <button
+                onClick={onOpenNourishment}
+                className="bg-amber-800/85 active:bg-amber-700 text-amber-100 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-amber-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                title="Permanent Character Nourishment"
+              >
+                <span>🥗</span>
+                <span>Nourish</span>
               </button>
             )}
 

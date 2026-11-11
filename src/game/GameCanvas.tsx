@@ -22,6 +22,12 @@ import {
   createGroveGolem,
   createShadowTitan,
   createPetModel,
+  createPetHouse,
+  createFoodBowl,
+  createWaterBowl,
+  createPetBed,
+  createPlayBall,
+  createSanctuaryArchway,
   PlayerMeshGroup,
   PetMeshGroup,
 } from './proceduralModels';
@@ -64,13 +70,16 @@ interface GameCanvasProps {
   isZenMode: boolean;
   jumpCount: number;
   camTurnDelta: number;
-  currentLocation: 'farm' | 'wild_grounds';
+  currentLocation: 'farm' | 'wild_grounds' | 'pet_den';
   onWaveInfoChange: (info: { wave: number; title: string; enemiesRemaining: number; prepCountdown: number | null }) => void;
   onInstanceVictory: (result: { wavesCleared: number; essenceEarned: number; goldEarned: number }) => void;
   onInstanceDefeat: (result: { wavesCleared: number; essenceEarned: number; goldEarned: number }) => void;
   onOpenSeedShop: () => void;
   onOpenPortalModal: () => void;
   onOpenSeedPicker: (plotId: number) => void;
+  onOpenPetInteraction?: (petId: string) => void;
+  onEnterPetDen?: () => void;
+  onLeavePetDen?: () => void;
   portalTheme?: PortalTheme;
   isWarping?: boolean;
   onTimePhaseChange?: (phase: TimePhase, timeOfDay: number) => void;
@@ -146,6 +155,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onOpenSeedShop,
   onOpenPortalModal,
   onOpenSeedPicker,
+  onOpenPetInteraction,
+  onEnterPetDen,
+  onLeavePetDen,
   portalTheme = 'normal',
   isWarping = false,
   onTimePhaseChange,
@@ -184,6 +196,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     onOpenSeedShop,
     onOpenPortalModal,
     onOpenSeedPicker,
+    onOpenPetInteraction,
+    onEnterPetDen,
+    onLeavePetDen,
     isZenMode,
     portalTheme,
     isWarping,
@@ -215,6 +230,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       onOpenSeedShop,
       onOpenPortalModal,
       onOpenSeedPicker,
+      onOpenPetInteraction,
+      onEnterPetDen,
+      onLeavePetDen,
       isZenMode,
       portalTheme,
       isWarping,
@@ -244,6 +262,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     onOpenSeedShop,
     onOpenPortalModal,
     onOpenSeedPicker,
+    onOpenPetInteraction,
+    onEnterPetDen,
+    onLeavePetDen,
     isZenMode,
     portalTheme,
     isWarping,
@@ -581,6 +602,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     seedStall.rotation.y = -Math.PI / 4;
     farmEnvironmentGroup.add(seedStall);
 
+    // --- PET DEN ENTRANCE ARCHWAY ON FARM ---
+    const farmPetDenArch = createSanctuaryArchway('To Pet Sanctuary');
+    farmPetDenArch.position.set(12, 0, -10);
+    farmPetDenArch.rotation.y = -Math.PI / 4;
+    farmEnvironmentGroup.add(farmPetDenArch);
+
+    // Welcoming flagstone stepping path leading up to Pet Sanctuary archway
+    for (let s = 0; s < 5; s++) {
+      const stone = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.55 - s * 0.04, 0.58 - s * 0.04, 0.04, 7),
+        new THREE.MeshStandardMaterial({ color: 0x9e9e9e, roughness: 0.9 })
+      );
+      stone.position.set(12 - s * 1.1, 0.02, -10 + s * 1.1);
+      stone.rotation.y = s * 0.8;
+      stone.receiveShadow = true;
+      farmEnvironmentGroup.add(stone);
+    }
+
     // --- PORTAL TO WILD GROUNDS ON FARM (UPGRADED MAGICAL PORTAL) ---
     const upgradedPortal = createUpgradedPortal(stateRef.current.portalTheme || 'normal');
     upgradedPortal.group.position.set(-12, 0, -10);
@@ -847,6 +886,286 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // ==========================================
+    // 3. PET DEN / PET SANCTUARY ENVIRONMENT GROUP
+    // ==========================================
+    const petDenEnvironmentGroup = new THREE.Group();
+    petDenEnvironmentGroup.name = 'pet_den_environment';
+    petDenEnvironmentGroup.visible = false;
+    scene.add(petDenEnvironmentGroup);
+
+    // Spacious, lush green sanctuary meadow
+    const denGroundGeo = new THREE.CylinderGeometry(30, 32, 4, 32);
+    const denGroundMat = new THREE.MeshStandardMaterial({
+      color: 0x68a357,
+      roughness: 0.9,
+    });
+    const denGround = new THREE.Mesh(denGroundGeo, denGroundMat);
+    denGround.position.y = -2;
+    denGround.receiveShadow = true;
+    petDenEnvironmentGroup.add(denGround);
+
+    // Perimeter gentle grassy mounds
+    for (let i = 0; i < 18; i++) {
+      const ang = (i * Math.PI * 2) / 18;
+      const mound = new THREE.Mesh(
+        new THREE.SphereGeometry(2.2 + (i % 3) * 0.4, 8, 8),
+        new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? 0x588157 : 0x70a962, roughness: 0.95 })
+      );
+      mound.position.set(Math.cos(ang) * 27.5, -0.6, Math.sin(ang) * 27.5);
+      mound.scale.set(1.5, 0.45, 1.5);
+      petDenEnvironmentGroup.add(mound);
+    }
+
+    // Walking Paths (winding sandy/flagstone paths)
+    // 1. Entrance to Central Pond path
+    for (let z = -14; z <= -3; z += 1.8) {
+      const pathStone = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.85, 0.9, 0.04, 8),
+        new THREE.MeshStandardMaterial({ color: 0xddb892, roughness: 0.95 })
+      );
+      pathStone.position.set(Math.sin(z * 0.5) * 0.8, 0.02, z);
+      pathStone.receiveShadow = true;
+      petDenEnvironmentGroup.add(pathStone);
+    }
+
+    // 2. West branch path to Cottage 1 & beds
+    for (let x = -2; x >= -8; x -= 1.6) {
+      const pathStone = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.75, 0.8, 0.04, 7),
+        new THREE.MeshStandardMaterial({ color: 0xddb892, roughness: 0.95 })
+      );
+      pathStone.position.set(x, 0.02, -5 + Math.sin(x * 0.8) * 0.6);
+      pathStone.receiveShadow = true;
+      petDenEnvironmentGroup.add(pathStone);
+    }
+
+    // 3. East branch path to Cottage 2 & Gazebo
+    for (let x = 2; x <= 8; x += 1.6) {
+      const pathStone = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.75, 0.8, 0.04, 7),
+        new THREE.MeshStandardMaterial({ color: 0xddb892, roughness: 0.95 })
+      );
+      pathStone.position.set(x, 0.02, -4 + Math.sin(x * 0.8) * 0.6);
+      pathStone.receiveShadow = true;
+      petDenEnvironmentGroup.add(pathStone);
+    }
+
+    // Central Scenic Pet Sanctuary Pond
+    const denPond = new THREE.Group();
+    denPond.position.set(-0.5, 0, 0.5);
+
+    // Pond rim of smooth mossy rocks
+    for (let i = 0; i < 16; i++) {
+      const ang = (i * Math.PI * 2) / 16;
+      const rockRadius = 0.5 + (i % 3) * 0.15;
+      const rock = createRock(rockRadius);
+      rock.position.set(Math.cos(ang) * 3.6, 0, Math.sin(ang) * 3.6);
+      rock.scale.set(1.2, 0.6, 1.2);
+      denPond.add(rock);
+    }
+
+    // Shimmering Pond Water
+    const denWaterMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.06,
+      metalness: 0.25,
+      transparent: true,
+      opacity: 0.88,
+      envMapIntensity: 1.5,
+    });
+    const denWater = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 0.2, 24), denWaterMat);
+    denWater.position.y = 0.12;
+    denWater.receiveShadow = true;
+    denPond.add(denWater);
+
+    // Animated Pond Surface Ripple
+    const denRippleMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    });
+    const denRipple = new THREE.Mesh(new THREE.RingGeometry(0.8, 0.95, 20), denRippleMat);
+    denRipple.rotation.x = -Math.PI / 2;
+    denRipple.position.y = 0.14;
+    denPond.add(denRipple);
+
+    // Floating Water Lily Pads
+    const lilyMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.8 });
+    const flwMat = new THREE.MeshStandardMaterial({ color: 0xff758f, roughness: 0.6 });
+    for (let i = 0; i < 5; i++) {
+      const ang = i * 1.3 + 0.4;
+      const dist = 1.2 + (i % 3) * 0.7;
+      const lily = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.02, 8), lilyMat);
+      lily.position.set(Math.cos(ang) * dist, 0.13, Math.sin(ang) * dist);
+      if (i % 2 === 0) {
+        const petal = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.14, 6), flwMat);
+        petal.position.set(0, 0.08, 0);
+        lily.add(petal);
+      }
+      denPond.add(lily);
+    }
+
+    // Wooden Pond Pier / Viewing Dock
+    const dock = new THREE.Group();
+    dock.position.set(0, 0, 3.2);
+    for (let p = 0; p < 4; p++) {
+      const plank = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 0.08, 0.45),
+        new THREE.MeshStandardMaterial({ color: 0x7f4f24, roughness: 0.85 })
+      );
+      plank.position.set(0, 0.18, p * 0.48);
+      plank.castShadow = true;
+      dock.add(plank);
+    }
+    denPond.add(dock);
+    petDenEnvironmentGroup.add(denPond);
+    envSystem.registerPondWater(denWater);
+
+    // 3 Cute Pet Cottages / Houses
+    const petHouse1 = createPetHouse();
+    petHouse1.position.set(-9, 0, -6);
+    petHouse1.rotation.y = Math.PI / 5;
+    petDenEnvironmentGroup.add(petHouse1);
+
+    const petHouse2 = createPetHouse();
+    petHouse2.position.set(9, 0, -5);
+    petHouse2.rotation.y = -Math.PI / 6;
+    petDenEnvironmentGroup.add(petHouse2);
+
+    const petHouse3 = createPetHouse();
+    petHouse3.position.set(-10, 0, 7);
+    petHouse3.rotation.y = Math.PI / 2.5;
+    petDenEnvironmentGroup.add(petHouse3);
+
+    // Pet Resting Beds & Cushions
+    const bed1 = createPetBed();
+    bed1.position.set(-4.5, 0, -3.5);
+    petDenEnvironmentGroup.add(bed1);
+
+    const bed2 = createPetBed();
+    bed2.position.set(5.5, 0, -3);
+    petDenEnvironmentGroup.add(bed2);
+
+    const bed3 = createPetBed();
+    bed3.position.set(-6, 0, 4.5);
+    petDenEnvironmentGroup.add(bed3);
+
+    const bed4 = createPetBed();
+    bed4.position.set(6, 0, 4.5);
+    petDenEnvironmentGroup.add(bed4);
+
+    // Wooden Gazebo Canopy with soft shade
+    const gazebo = new THREE.Group();
+    gazebo.position.set(10, 0, 3);
+    for (let c = 0; c < 4; c++) {
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.14, 2.6, 8),
+        new THREE.MeshStandardMaterial({ color: 0x6f4e37, roughness: 0.85 })
+      );
+      const postX = c % 2 === 0 ? -1.2 : 1.2;
+      const postZ = c < 2 ? -1.2 : 1.2;
+      post.position.set(postX, 1.3, postZ);
+      post.castShadow = true;
+      gazebo.add(post);
+    }
+    const gazeboRoof = new THREE.Mesh(
+      new THREE.ConeGeometry(2.4, 1.2, 4),
+      new THREE.MeshStandardMaterial({ color: 0x588157, roughness: 0.85 })
+    );
+    gazeboRoof.position.set(0, 3.1, 0);
+    gazeboRoof.rotation.y = Math.PI / 4;
+    gazeboRoof.castShadow = true;
+    gazebo.add(gazeboRoof);
+    petDenEnvironmentGroup.add(gazebo);
+
+    // Food & Water Bowls throughout sanctuary
+    const foodBowl1 = createFoodBowl();
+    foodBowl1.position.set(-2.8, 0, -2.2);
+    petDenEnvironmentGroup.add(foodBowl1);
+
+    const waterBowl1 = createWaterBowl();
+    waterBowl1.position.set(-2.0, 0, -2.2);
+    petDenEnvironmentGroup.add(waterBowl1);
+
+    const foodBowl2 = createFoodBowl();
+    foodBowl2.position.set(4.2, 0, 1.8);
+    petDenEnvironmentGroup.add(foodBowl2);
+
+    const waterBowl2 = createWaterBowl();
+    waterBowl2.position.set(5.0, 0, 1.8);
+    petDenEnvironmentGroup.add(waterBowl2);
+
+    // Play Area & Toys
+    const ball1 = createPlayBall(0xff0054);
+    ball1.position.set(-3.5, 0, 6);
+    petDenEnvironmentGroup.add(ball1);
+
+    const ball2 = createPlayBall(0x0077b6);
+    ball2.position.set(3.2, 0, 6.8);
+    petDenEnvironmentGroup.add(ball2);
+
+    // Agility play logs & ramp
+    const rampGroup = new THREE.Group();
+    rampGroup.position.set(0, 0, 7.5);
+    const log1 = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.24, 0.24, 2.8, 8),
+      new THREE.MeshStandardMaterial({ color: 0x582f0e, roughness: 0.9 })
+    );
+    log1.rotation.z = Math.PI / 2;
+    log1.position.set(0, 0.24, 0);
+    log1.castShadow = true;
+    rampGroup.add(log1);
+    petDenEnvironmentGroup.add(rampGroup);
+
+    // Trees & Lush Vegetation
+    for (let t = 0; t < 12; t++) {
+      const ang = (t * Math.PI * 2) / 12 + (t % 2) * 0.2;
+      const dist = 18 + (t % 3) * 3.5;
+      const treeType = t % 3 === 0 ? 'apple' : t % 2 === 0 ? 'oak' : 'pine';
+      const tree = createTree(treeType);
+      tree.position.set(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
+      petDenEnvironmentGroup.add(tree);
+      envSystem.registerTree(tree);
+    }
+
+    // Flower clusters across sanctuary
+    for (let f = 0; f < 16; f++) {
+      const ang = (f * Math.PI * 2) / 16 + 0.3;
+      const dist = 8 + (f % 4) * 3.2;
+      const flowerCluster = new THREE.Group();
+      flowerCluster.position.set(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
+      const flwColor = [0xff4d6d, 0xffb703, 0x7209b7, 0x38bdf8][f % 4];
+      const flwMaterial = new THREE.MeshStandardMaterial({ color: flwColor, roughness: 0.6 });
+      for (let k = 0; k < 4; k++) {
+        const blossom = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12, 0), flwMaterial);
+        blossom.position.set((Math.random() - 0.5) * 0.8, 0.12, (Math.random() - 0.5) * 0.8);
+        flowerCluster.add(blossom);
+      }
+      petDenEnvironmentGroup.add(flowerCluster);
+    }
+
+    // Low Bushes & Rocks
+    for (let b = 0; b < 10; b++) {
+      const ang = (b * Math.PI * 2) / 10 + 0.1;
+      const dist = 13 + (b % 3) * 4;
+      const bush = new THREE.Mesh(
+        new THREE.SphereGeometry(0.7 + (b % 2) * 0.3, 6, 6),
+        new THREE.MeshStandardMaterial({ color: 0x38b000, roughness: 0.9 })
+      );
+      bush.position.set(Math.cos(ang) * dist, 0.35, Math.sin(ang) * dist);
+      bush.scale.set(1.2, 0.8, 1.2);
+      bush.castShadow = true;
+      petDenEnvironmentGroup.add(bush);
+    }
+
+    // Return to Farm Archway (at entrance/exit of sanctuary)
+    const returnFarmArch = createSanctuaryArchway('Return to Farm');
+    returnFarmArch.position.set(0, 0, -14.5);
+    returnFarmArch.rotation.y = 0;
+    petDenEnvironmentGroup.add(returnFarmArch);
+
+    // ==========================================
     // 3. PLAYER SPAWN & STATE
     // ==========================================
     const playerMesh = createPlayerModel();
@@ -989,11 +1308,199 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
     const petAnimStateMap = new Map<string, PetAnimRuntimeState>();
 
-    // Follower Pet Meshes
+    // Autonomous AI state for Sanctuary / Pet Den
+    interface PetDenAIState {
+      behavior: 'wander' | 'rest' | 'play' | 'eat' | 'drink' | 'explore' | 'social';
+      targetPos: THREE.Vector3;
+      timer: number;
+      subTimer: number;
+      speed: number;
+      socialPartnerId?: string;
+      restPose: 'sit' | 'lie';
+      playMotion: 'bounce' | 'spin' | 'wiggle';
+      wanderAngle: number;
+    }
+    const petDenAIMap = new Map<string, PetDenAIState>();
+
+    const SANCTUARY_FOOD_BOWLS = [new THREE.Vector3(-2.8, 0, -2.2), new THREE.Vector3(4.2, 0, 1.8)];
+    const SANCTUARY_WATER_BOWLS = [new THREE.Vector3(-2.0, 0, -2.2), new THREE.Vector3(5.0, 0, 1.8)];
+    const SANCTUARY_POND_EDGES = [
+      new THREE.Vector3(-1.2, 0, 2.6),
+      new THREE.Vector3(1.8, 0, 1.4),
+      new THREE.Vector3(-2.2, 0, -0.6),
+      new THREE.Vector3(0.5, 0, -2.5),
+    ];
+    const SANCTUARY_BEDS = [
+      new THREE.Vector3(-4.5, 0, -3.5),
+      new THREE.Vector3(5.5, 0, -3),
+      new THREE.Vector3(-6, 0, 4.5),
+      new THREE.Vector3(6, 0, 4.5),
+      new THREE.Vector3(10, 0, 3),
+    ];
+    const SANCTUARY_PLAY_AREAS = [
+      new THREE.Vector3(-3.5, 0, 6),
+      new THREE.Vector3(3.2, 0, 6.8),
+      new THREE.Vector3(0, 0, 7.5),
+    ];
+    const SANCTUARY_EXPLORE_SPOTS = [
+      new THREE.Vector3(-9, 0, -6),
+      new THREE.Vector3(9, 0, -5),
+      new THREE.Vector3(-10, 0, 7),
+      new THREE.Vector3(-12, 0, 0),
+      new THREE.Vector3(12, 0, -2),
+      new THREE.Vector3(-5, 0, 10),
+      new THREE.Vector3(5, 0, 10),
+    ];
+
+    function pickNewSanctuaryBehavior(pet: PetData, curPos: THREE.Vector3): PetDenAIState {
+      const roll = Math.random();
+      const species = pet.species;
+
+      let chosenBehavior: PetDenAIState['behavior'] = 'wander';
+      const target = curPos.clone();
+      let duration = 5.0 + Math.random() * 5.0;
+      let moveSpeed = 1.6 + Math.random() * 0.6;
+
+      if (species === 'turtle') {
+        moveSpeed = 0.7;
+        if (roll < 0.4) chosenBehavior = 'rest';
+        else if (roll < 0.7) chosenBehavior = 'drink';
+        else chosenBehavior = 'wander';
+      } else if (species === 'fox') {
+        moveSpeed = 2.6;
+        if (roll < 0.35) chosenBehavior = 'wander';
+        else if (roll < 0.65) chosenBehavior = 'explore';
+        else if (roll < 0.85) chosenBehavior = 'play';
+        else chosenBehavior = 'eat';
+      } else if (species === 'rabbit') {
+        moveSpeed = 2.2;
+        if (roll < 0.4) chosenBehavior = 'play';
+        else if (roll < 0.75) chosenBehavior = 'wander';
+        else chosenBehavior = 'eat';
+      } else if (species === 'owl') {
+        moveSpeed = 1.8;
+        if (roll < 0.35) chosenBehavior = 'explore';
+        else if (roll < 0.65) chosenBehavior = 'rest';
+        else chosenBehavior = 'wander';
+      } else if (species === 'bear') {
+        moveSpeed = 1.1;
+        if (roll < 0.45) chosenBehavior = 'rest';
+        else if (roll < 0.7) chosenBehavior = 'eat';
+        else chosenBehavior = 'wander';
+      } else if (species === 'slime') {
+        moveSpeed = 1.4;
+        if (roll < 0.5) chosenBehavior = 'play';
+        else chosenBehavior = 'wander';
+      } else if (species === 'frog') {
+        moveSpeed = 1.8;
+        if (roll < 0.4) chosenBehavior = 'drink';
+        else if (roll < 0.7) chosenBehavior = 'play';
+        else chosenBehavior = 'wander';
+      } else {
+        if (roll < 0.3) chosenBehavior = 'explore';
+        else if (roll < 0.6) chosenBehavior = 'wander';
+        else if (roll < 0.8) chosenBehavior = 'play';
+        else chosenBehavior = 'rest';
+      }
+
+      if (chosenBehavior === 'eat') {
+        const bowl = SANCTUARY_FOOD_BOWLS[Math.floor(Math.random() * SANCTUARY_FOOD_BOWLS.length)];
+        target.copy(bowl).add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0, (Math.random() - 0.5) * 0.8));
+        duration = 6.0;
+      } else if (chosenBehavior === 'drink') {
+        const list = Math.random() < 0.5 ? SANCTUARY_WATER_BOWLS : SANCTUARY_POND_EDGES;
+        const pt = list[Math.floor(Math.random() * list.length)];
+        target.copy(pt).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.6));
+        duration = 6.0;
+      } else if (chosenBehavior === 'rest') {
+        const bed = SANCTUARY_BEDS[Math.floor(Math.random() * SANCTUARY_BEDS.length)];
+        target.copy(bed).add(new THREE.Vector3((Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.5));
+        duration = 8.0 + Math.random() * 6.0;
+      } else if (chosenBehavior === 'play') {
+        const playSpot = SANCTUARY_PLAY_AREAS[Math.floor(Math.random() * SANCTUARY_PLAY_AREAS.length)];
+        target.copy(playSpot).add(new THREE.Vector3((Math.random() - 0.5) * 2.0, 0, (Math.random() - 0.5) * 2.0));
+        duration = 5.0 + Math.random() * 4.0;
+      } else if (chosenBehavior === 'explore') {
+        const spot = SANCTUARY_EXPLORE_SPOTS[Math.floor(Math.random() * SANCTUARY_EXPLORE_SPOTS.length)];
+        target.copy(spot).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0, (Math.random() - 0.5) * 1.5));
+        duration = 6.0 + Math.random() * 4.0;
+      } else {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = 3.0 + Math.random() * 16.0;
+        target.set(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
+        if (Math.hypot(target.x, target.z) < 3.2) {
+          target.multiplyScalar(1.6);
+        }
+        duration = 5.0 + Math.random() * 5.0;
+      }
+
+      return {
+        behavior: chosenBehavior,
+        targetPos: target,
+        timer: duration,
+        subTimer: 0,
+        speed: moveSpeed,
+        restPose: Math.random() < 0.6 ? 'sit' : 'lie',
+        playMotion: Math.random() < 0.4 ? 'bounce' : Math.random() < 0.7 ? 'spin' : 'wiggle',
+        wanderAngle: Math.atan2(target.x - curPos.x, target.z - curPos.z),
+      };
+    }
+
+    function createPetNameBadge(name: string): THREE.Sprite {
+      const canvas = document.createElement('canvas');
+      canvas.width = 192;
+      canvas.height = 48;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = 'rgba(28, 25, 23, 0.82)';
+      ctx.roundRect(4, 4, 184, 40, 12);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = '#fef08a';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, 96, 24);
+      const texture = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(1.4, 0.35, 1);
+      sprite.position.y = 1.35;
+      return sprite;
+    }
+
+    // Follower & Sanctuary Pet Meshes
     const petMeshMap = new Map<string, PetMeshGroup>();
-    stateRef.current.pets.forEach((pet) => {
+    stateRef.current.pets.forEach((pet, pIdx) => {
       const petMesh = createPetModel(pet.species);
-      petMesh.position.set(Math.random() * 4 - 2, 0, Math.random() * 4 - 2);
+      const isSanctuary = stateRef.current.currentLocation === 'pet_den';
+
+      if (pet.isFollowing) {
+        // Escort formation fan-out behind player
+        const ang = Math.PI + (pIdx - 2) * 0.45;
+        petMesh.position.set(
+          playerPhysics.pos.x + Math.sin(ang) * (2.0 + (pIdx % 2) * 0.8),
+          0,
+          playerPhysics.pos.z + Math.cos(ang) * (2.0 + (pIdx % 2) * 0.8)
+        );
+        petMesh.visible = pet.unlocked;
+      } else if (isSanctuary) {
+        // In Pet Sanctuary, roam meadow
+        petMesh.position.set((Math.random() - 0.5) * 16, 0, (Math.random() - 0.5) * 16);
+        petMesh.visible = pet.unlocked;
+      } else {
+        // Non-followers reside peacefully in the Pet Den
+        petMesh.position.set(0, -100, 0);
+        petMesh.visible = false;
+      }
+
+      // Add 3D Floating Name Badge above pet head
+      const nameBadge = createPetNameBadge(pet.name);
+      nameBadge.visible = false;
+      petMesh.add(nameBadge);
+      (petMesh.userData as any).nameBadge = nameBadge;
+
       scene.add(petMesh);
       petMeshMap.set(pet.id, petMesh);
 
@@ -1007,6 +1514,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         damageTimer: 0,
         stunTimer: 0,
       });
+
+      petDenAIMap.set(pet.id, pickNewSanctuaryBehavior(pet, petMesh.position));
     });
 
     // Touch & Mouse controls listeners for camera drag
@@ -1167,6 +1676,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             if (hasWolfMight) finalDmg *= 1.25;
             if (hasDragonMight) finalDmg *= 1.35;
 
+            // Tomato Nourishment: permanent attack damage multiplier
+            const tomatoAttackBonus = (stateRef.current.player.nourishment?.attackDamagePct || 0) / 100;
+            if (tomatoAttackBonus > 0) {
+              finalDmg *= 1 + tomatoAttackBonus;
+            }
+
             // Armor rupture from Bear Earthshatter Lv 40+
             if (enemy.armorRuptureTimer > 0) {
               finalDmg *= 1.35;
@@ -1194,27 +1709,37 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }
             }
 
-            // Rabbit Predator Instinct: Critical Hit chance against enemies with low health (< 50% HP)
+            // Critical Hit chance (Strawberry Nourishment + Rabbit Predator Instinct)
             let isCrit = false;
+            let critChance = (stateRef.current.player.nourishment?.critChancePct || 0) / 100;
+
             if (hasPredatorInstinct) {
               const rabLvl = rabbitPet?.level || 1;
               const hpPct = enemy.health / enemy.maxHealth;
-              let critChance = rabLvl >= 10 ? 0.12 : 0.05;
+              critChance += rabLvl >= 10 ? 0.12 : 0.05;
               if (hpPct <= 0.5) {
                 critChance += rabLvl >= 50 ? 0.90 : rabLvl >= 10 ? 0.40 : 0.25;
               }
               if (options?.isRabbitSkill && rabLvl >= 50) {
                 critChance = 1.0; // 100% Guaranteed Crit at Lv 50
               }
-              if (Math.random() < critChance) {
-                isCrit = true;
-                const critMult = hpPct <= 0.3 && rabLvl >= 30 ? 2.2 : 1.6;
-                finalDmg *= critMult;
-                soundEngine.playCritHit();
-                particleSys.spawnCritImpact(enemy.mesh.position);
-                if (rabLvl >= 20) {
-                  playerPhysics.speedBoostTimer = 2.0;
-                }
+            }
+
+            // Combat overall cap: 85% (0.85) maximum unless a 100% guaranteed skill override
+            if (critChance < 1.0) {
+              critChance = Math.min(0.85, critChance);
+            }
+
+            if (critChance > 0 && Math.random() < critChance) {
+              isCrit = true;
+              const hpPct = enemy.health / enemy.maxHealth;
+              const rabLvl = rabbitPet?.level || 1;
+              const critMult = hasPredatorInstinct && hpPct <= 0.3 && rabLvl >= 30 ? 2.2 : 1.6;
+              finalDmg *= critMult;
+              soundEngine.playCritHit();
+              particleSys.spawnCritImpact(enemy.mesh.position);
+              if (hasPredatorInstinct && rabLvl >= 20) {
+                playerPhysics.speedBoostTimer = 2.0;
               }
             }
 
@@ -1680,6 +2205,131 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let perfFrameTimeAccum = 0;
     let loopFrameIndex = 0;
 
+    // --- COLLISION OBSTACLE DEFINITIONS & RESOLVER ---
+    const FARM_TREE_COLLIDERS: [number, number][] = [
+      [-16, -14], [-20, -8], [-18, 0], [-19, 14], [-8, 18],
+      [2, 22], [14, 20], [22, 12], [24, -2], [22, -16],
+      [7, -18], [-10, -18], [18, -6],
+    ];
+    const SANCTUARY_TREE_COLLIDERS: [number, number][] = [];
+    for (let t = 0; t < 12; t++) {
+      const ang = (t * Math.PI * 2) / 12 + (t % 2) * 0.2;
+      const dist = 18 + (t % 3) * 3.5;
+      SANCTUARY_TREE_COLLIDERS.push([Math.cos(ang) * dist, Math.sin(ang) * dist]);
+    }
+
+    function applyWorldCollisions(pos: THREE.Vector3, location: 'farm' | 'wild_grounds' | 'pet_den', playerRadius = 0.55) {
+      // Circle collision resolver (smooth slide)
+      const resolveCircle = (obsX: number, obsZ: number, obsRadius: number) => {
+        const dx = pos.x - obsX;
+        const dz = pos.z - obsZ;
+        const dist = Math.hypot(dx, dz);
+        const minDist = playerRadius + obsRadius;
+        if (dist < minDist && dist > 0.0001) {
+          const push = (minDist - dist) / dist;
+          pos.x += dx * push;
+          pos.z += dz * push;
+        }
+      };
+
+      // Axis-aligned box collision resolver (smooth wall sliding)
+      const resolveBox = (minX: number, maxX: number, minZ: number, maxZ: number) => {
+        const closestX = Math.max(minX, Math.min(pos.x, maxX));
+        const closestZ = Math.max(minZ, Math.min(pos.z, maxZ));
+        const dx = pos.x - closestX;
+        const dz = pos.z - closestZ;
+        const dist = Math.hypot(dx, dz);
+        if (dist < playerRadius) {
+          if (dist > 0.0001) {
+            const push = (playerRadius - dist) / dist;
+            pos.x += dx * push;
+            pos.z += dz * push;
+          } else {
+            const left = pos.x - minX;
+            const right = maxX - pos.x;
+            const top = pos.z - minZ;
+            const bottom = maxZ - pos.z;
+            const minEdge = Math.min(left, right, top, bottom);
+            if (minEdge === left) pos.x = minX - playerRadius;
+            else if (minEdge === right) pos.x = maxX + playerRadius;
+            else if (minEdge === top) pos.z = minZ - playerRadius;
+            else pos.z = maxZ + playerRadius;
+          }
+        }
+      };
+
+      if (location === 'farm') {
+        // Main Farmhouse
+        resolveBox(-5.6, 1.6, -13.0, -7.2);
+        // Red Barn
+        resolveBox(6.8, 13.2, -14.2, -7.8);
+        // Windmill
+        resolveCircle(-15, 5, 2.2);
+        // Stone Well
+        resolveCircle(4, 1, 1.35);
+        // Barnaby's Seed Stall
+        resolveBox(5.4, 8.6, -3.2, -0.8);
+        // Fox Den
+        resolveCircle(-11, -2, 1.85);
+        // Turtle Pond rim
+        resolveCircle(12, 8, 2.8);
+        // Quarry Node Boulders
+        resolveCircle(23, -8, 1.7);
+        resolveCircle(25, 4, 1.7);
+        // Perimeter wooden fences
+        resolveBox(-8.8, 2.8, -1.8, -1.2);
+        // Archway wooden posts (leaving arch passage clear)
+        resolveCircle(10.2, -10, 0.45);
+        resolveCircle(13.8, -10, 0.45);
+        resolveCircle(-13.8, -10, 0.45);
+        resolveCircle(-10.2, -10, 0.45);
+        // Farm Trees
+        for (let i = 0; i < FARM_TREE_COLLIDERS.length; i++) {
+          resolveCircle(FARM_TREE_COLLIDERS[i][0], FARM_TREE_COLLIDERS[i][1], 1.15);
+        }
+        // Farm outer boundary
+        const distFromCenter = Math.hypot(pos.x, pos.z);
+        if (distFromCenter > 34) {
+          pos.x = (pos.x / distFromCenter) * 34;
+          pos.z = (pos.z / distFromCenter) * 34;
+        }
+      } else if (location === 'pet_den') {
+        // 3 Pet Cottages
+        resolveBox(-10.5, -7.5, -7.5, -4.5);
+        resolveBox(7.5, 10.5, -6.5, -3.5);
+        resolveBox(-11.5, -8.5, 5.5, 8.5);
+        // Gazebo corner posts
+        resolveCircle(8.8, 1.8, 0.35);
+        resolveCircle(11.2, 1.8, 0.35);
+        resolveCircle(8.8, 4.2, 0.35);
+        resolveCircle(11.2, 4.2, 0.35);
+        // Central Pond deep water center
+        resolveCircle(0, 0, 3.5);
+        // Agility play logs
+        resolveBox(-1.8, 1.8, 7.1, 7.9);
+        // Return Archway wooden posts
+        resolveCircle(-1.8, -14.5, 0.45);
+        resolveCircle(1.8, -14.5, 0.45);
+        // Sanctuary Perimeter Trees
+        for (let t = 0; t < SANCTUARY_TREE_COLLIDERS.length; t++) {
+          resolveCircle(SANCTUARY_TREE_COLLIDERS[t][0], SANCTUARY_TREE_COLLIDERS[t][1], 1.2);
+        }
+        // Sanctuary outer boundary
+        const distFromCenter = Math.hypot(pos.x, pos.z);
+        if (distFromCenter > 25.5) {
+          pos.x = (pos.x / distFromCenter) * 25.5;
+          pos.z = (pos.z / distFromCenter) * 25.5;
+        }
+      } else if (location === 'wild_grounds') {
+        // Arena outer boundary
+        const distFromCenter = Math.hypot(pos.x, pos.z);
+        if (distFromCenter > 28.5) {
+          pos.x = (pos.x / distFromCenter) * 28.5;
+          pos.z = (pos.z / distFromCenter) * 28.5;
+        }
+      }
+    }
+
     // Main tick loop
     function tick() {
       const frameStartTime = performance.now();
@@ -1687,9 +2337,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const delta = Math.min(clock.getDelta(), 0.1);
       const now = Date.now();
 
-      // Check for location change (Farm <-> Wild Grounds)
+      // Check for location change (Farm <-> Wild Grounds <-> Pet Den)
       const currentLoc = stateRef.current.currentLocation;
       if (currentLoc !== lastLocation) {
+        const prevLoc = lastLocation;
         lastLocation = currentLoc;
         isPlayerVictory = false;
         isPlayerDefeat = false;
@@ -1700,6 +2351,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (currentLoc === 'wild_grounds') {
           farmEnvironmentGroup.visible = false;
           instanceEnvironmentGroup.visible = true;
+          petDenEnvironmentGroup.visible = false;
           playerPhysics.pos.set(0, 0, 0);
           playerPhysics.rotY = 0;
           playerPhysics.shield = 0;
@@ -1718,22 +2370,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           scene.fog = new THREE.Fog(0x1a1226, 25, 65);
           sunLight.color.setHex(0xb5838d);
           hemiLight.color.setHex(0x5a189a);
+        } else if (currentLoc === 'pet_den') {
+          farmEnvironmentGroup.visible = false;
+          instanceEnvironmentGroup.visible = false;
+          petDenEnvironmentGroup.visible = true;
+          playerPhysics.pos.set(0, 0, -12); // inside Sanctuary entrance
+          playerPhysics.rotY = 0;
+          playerPhysics.shield = 0;
+          if (waterShieldMesh) waterShieldMesh.visible = false;
+          instanceActive = false;
+          soundEngine.playPortalWarp();
+          scene.background = new THREE.Color(0xbbf7d0); // peaceful sanctuary sky
+          scene.fog = new THREE.Fog(0xbbf7d0, 35, 80);
+          sunLight.color.setHex(0xfffbeb);
+          hemiLight.color.setHex(0xdcfce7);
         } else {
           farmEnvironmentGroup.visible = true;
           instanceEnvironmentGroup.visible = false;
-          playerPhysics.pos.set(-11, 0, -8); // spawn outside portal on farm
+          petDenEnvironmentGroup.visible = false;
+          if (prevLoc === 'pet_den') {
+            playerPhysics.pos.set(11, 0, -8); // outside Sanctuary archway on farm
+          } else {
+            playerPhysics.pos.set(-11, 0, -8); // outside Wild portal on farm
+          }
+          playerPhysics.shield = 0;
+          if (waterShieldMesh) waterShieldMesh.visible = false;
           instanceActive = false;
+          soundEngine.playPortalWarp();
+          scene.background = new THREE.Color(0xa7c7e7);
+          scene.fog = new THREE.Fog(0xa7c7e7, 30, 70);
           sunLight.color.setHex(0xfffae0);
           hemiLight.color.setHex(0xe0f2fe);
         }
 
         // Reposition follower pets smoothly around spawn position
-        petMeshMap.forEach((mesh) => {
-          mesh.position.set(
-            playerPhysics.pos.x + (Math.random() - 0.5) * 3,
-            0,
-            playerPhysics.pos.z - 2 + (Math.random() - 0.5) * 2
-          );
+        const allPets = stateRef.current.pets;
+        allPets.forEach((pet) => {
+          const mesh = petMeshMap.get(pet.id);
+          if (!mesh) return;
+          if (pet.isFollowing) {
+            mesh.visible = true;
+            mesh.position.set(
+              playerPhysics.pos.x + (Math.random() - 0.5) * 3,
+              0,
+              playerPhysics.pos.z - 2 + (Math.random() - 0.5) * 2
+            );
+          } else if (currentLoc === 'pet_den' && pet.unlocked) {
+            mesh.visible = true;
+            mesh.position.set(
+              (Math.random() - 0.5) * 14,
+              0,
+              (Math.random() - 0.5) * 14
+            );
+          } else {
+            mesh.visible = false;
+            mesh.position.set(0, -100, 0);
+          }
         });
       }
 
@@ -1787,7 +2479,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       particleSys.update(delta);
 
       // Update Atmospheric Environment System (Day/Night, Wind, Swaying Trees, Crops, Clouds, Birds, Butterflies, Water)
-      envSystem.update(delta, [], stateRef.current.currentLocation, particleSys);
+      const envLoc = stateRef.current.currentLocation === 'wild_grounds' ? 'wild_grounds' : 'farm';
+      envSystem.update(delta, [], envLoc, particleSys);
       if (stateRef.current.onTimePhaseChange) {
         stateRef.current.onTimePhaseChange(envSystem.getTimePhase(), envSystem.timeOfDay);
       }
@@ -1821,6 +2514,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const isMoving = inputLen > 0.1;
 
       let moveSpeed = 6.2;
+      const cornSpeedBonus = (stateRef.current.player.nourishment?.moveSpeedPct || 0) / 100;
+      if (cornSpeedBonus > 0) {
+        moveSpeed *= 1 + cornSpeedBonus;
+      }
       const equipped = stateRef.current.player.equippedSkillSlots;
       if (equipped.includes('pet_fox')) moveSpeed *= 1.15; // Fox passive
       if (playerPhysics.speedBoostTimer > 0) {
@@ -1835,6 +2532,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (playerPhysics.dashTimer > 0) {
         playerPhysics.dashTimer -= delta;
         playerPhysics.pos.addScaledVector(playerPhysics.dashDir, playerPhysics.dashSpeed * delta);
+        applyWorldCollisions(playerPhysics.pos, currentLoc);
         particleSys.spawnFlameTrail(playerPhysics.pos);
         if (Math.random() < 0.45) {
           particleSys.spawnFlameGroundPatch(playerPhysics.pos);
@@ -1856,18 +2554,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           .normalize();
 
         playerPhysics.pos.addScaledVector(worldDir, moveSpeed * delta * Math.min(inputLen, 1));
+        applyWorldCollisions(playerPhysics.pos, currentLoc);
 
         // Smooth rotation towards movement direction
         const targetRotY = Math.atan2(worldDir.x, worldDir.z);
         const rotDiff = THREE.MathUtils.euclideanModulo(targetRotY - playerPhysics.rotY + Math.PI, Math.PI * 2) - Math.PI;
         playerPhysics.rotY += rotDiff * Math.min(delta * 14, 1);
-
-        // Bounds check (radius ~32m in instance, ~36m on farm)
-        const maxDist = currentLoc === 'wild_grounds' ? 30 : 36;
-        const distFromCenter = Math.hypot(playerPhysics.pos.x, playerPhysics.pos.z);
-        if (distFromCenter > maxDist) {
-          playerPhysics.pos.setLength(maxDist);
-        }
 
         // Footstep audio during movement
         footstepTimer += delta;
@@ -2086,6 +2778,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         let distToTarget = 0;
 
         if (pet.isFollowing) {
+          mesh.visible = true;
           const followSlotIdx = followingPets.findIndex((p) => p.id === pet.id);
           const followResult = petFollowingController.updatePetPosition(
             mesh,
@@ -2102,41 +2795,103 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           pState.currentSpeed = petSpeed;
           pState.velocity.copy(petVel);
           pState.distToTarget = distToTarget;
+        } else if (currentLoc === 'pet_den' && pet.unlocked) {
+          // Autonomous Sanctuary AI behavior in Pet Den
+          mesh.visible = true;
+          let ai = petDenAIMap.get(pet.id);
+          if (!ai) {
+            ai = pickNewSanctuaryBehavior(pet, mesh.position);
+            petDenAIMap.set(pet.id, ai);
+            mesh.position.set((Math.random() - 0.5) * 14, 0, (Math.random() - 0.5) * 14);
+          }
+
+          ai.timer -= delta;
+          if (ai.timer <= 0) {
+            ai = pickNewSanctuaryBehavior(pet, mesh.position);
+            petDenAIMap.set(pet.id, ai);
+          }
+
+          // Execute action
+          if (ai.behavior === 'rest') {
+            petSpeed = 0;
+            petVel.set(0, 0, 0);
+          } else if (ai.behavior === 'play') {
+            petSpeed = 0.6;
+            mesh.rotation.y += delta * 2.8;
+            mesh.position.y = Math.abs(Math.sin(((mesh.userData as any).animTime || 0) * 6)) * 0.25;
+            petVel.set(0, 0, 0);
+          } else {
+            // Moving towards ai.targetPos (wander, eat, drink, explore, social)
+            const toTarget = new THREE.Vector3().subVectors(ai.targetPos, mesh.position);
+            toTarget.y = 0;
+            const dist = toTarget.length();
+            if (dist > 0.45) {
+              toTarget.normalize();
+              const step = Math.min(dist, ai.speed * delta);
+              mesh.position.addScaledVector(toTarget, step);
+              const targetAngle = Math.atan2(toTarget.x, toTarget.z);
+              mesh.rotation.y = THREE.MathUtils.damp(mesh.rotation.y, targetAngle, 8, delta);
+              petSpeed = ai.speed;
+              petVel.copy(toTarget).multiplyScalar(ai.speed);
+            } else {
+              petSpeed = 0;
+              petVel.set(0, 0, 0);
+            }
+          }
+          pState.currentSpeed = petSpeed;
+          pState.velocity.copy(petVel);
         } else {
-          // Pet is resting in farm habitat or idle spot
+          // Non-following pets reside in the Pet Sanctuary and are hidden on farm/wild grounds
+          mesh.visible = false;
           pState.currentSpeed = 0;
           pState.velocity.set(0, 0, 0);
+          return;
         }
 
-        // Distance culling for performance: skip micro limb calculations if > 50m away
+        // 3D floating name badge visibility and camera facing
+        const nameBadge = (mesh.userData as any).nameBadge;
+        if (nameBadge) {
+          const showBadge = (currentLoc === 'pet_den' && pet.unlocked) || (currentLoc === 'farm' && pet.isFollowing);
+          nameBadge.visible = showBadge;
+          if (showBadge) {
+            nameBadge.lookAt(camera.position);
+          }
+        }
+
+        // Distance culling for performance: skip micro limb calculations if distant
         const distToCamera = mesh.position.distanceTo(camera.position);
-        if (distToCamera < 50.0) {
-          petAnimator.update(
-            mesh,
-            {
-              petId: pet.id,
-              species: pet.species,
-              position: mesh.position,
-              velocity: petVel,
-              speed: petSpeed,
-              isGrounded: true,
-              isFollowing: pet.isFollowing,
-              targetPos: playerPhysics.pos,
-              distToTarget,
-              isCastingSkill: pState.isCastingSkill,
-              skillPhase: pState.skillPhase,
-              skillTimer: pState.skillTimer,
-              isTakingDamage: pState.damageTimer > 0,
-              damageTimer: pState.damageTimer,
-              isStunned: pState.stunTimer > 0,
-              stunTimer: pState.stunTimer,
-              isVictory: isPlayerVictory,
-              isDefeat: isPlayerDefeat,
-              animTime: mesh.userData.animTime,
-              slotIndex: overallIdx,
-            },
-            delta
-          );
+        if (distToCamera < 48.0) {
+          // Distance-based animation throttling for sanctuary when many pets are roaming
+          if (distToCamera > 22.0 && (loopFrameIndex + overallIdx) % 2 !== 0) {
+            // Throttled frame
+          } else {
+            petAnimator.update(
+              mesh,
+              {
+                petId: pet.id,
+                species: pet.species,
+                position: mesh.position,
+                velocity: petVel,
+                speed: petSpeed,
+                isGrounded: true,
+                isFollowing: pet.isFollowing,
+                targetPos: pet.isFollowing ? playerPhysics.pos : (petDenAIMap.get(pet.id)?.targetPos || playerPhysics.pos),
+                distToTarget,
+                isCastingSkill: pState.isCastingSkill,
+                skillPhase: pState.skillPhase,
+                skillTimer: pState.skillTimer,
+                isTakingDamage: pState.damageTimer > 0,
+                damageTimer: pState.damageTimer,
+                isStunned: pState.stunTimer > 0,
+                stunTimer: pState.stunTimer,
+                isVictory: isPlayerVictory,
+                isDefeat: isPlayerDefeat,
+                animTime: mesh.userData.animTime,
+                slotIndex: overallIdx,
+              },
+              delta
+            );
+          }
           // Water ripple & splash interaction when pet enters water
           if (stateRef.current.currentLocation === 'farm' && pet.isFollowing && petSpeed > 0.15) {
             envSystem.checkWaterInteraction([{ id: pet.id, pos: mesh.position, isMoving: true }], particleSys);
@@ -2395,6 +3150,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 }
 
                 let incomingDmg = enemy.damage;
+
+                // Pumpkin Nourishment: permanent defense bonus (up to 20% incoming damage reduction)
+                const defenseBonusPct = Math.min(20, stateRef.current.player.nourishment?.defensePct || 0);
+                if (defenseBonusPct > 0) {
+                  incomingDmg *= 1 - defenseBonusPct / 100;
+                }
+
                 const equipped = stateRef.current.player.equippedSkillSlots;
 
                 // TURTLE PASSIVE: Ocean Armor (reduces incoming damage, scaling when HP is low)
@@ -2587,7 +3349,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           wasNearPortal = false;
         }
 
-        // 2. Check Barnaby's Seed Stall (7, 0, -2)
+        // 2. Check Pet Den Entrance Archway (12, 0, -10)
+        if (!prompt) {
+          const distToPetDen = Math.hypot(12 - pPos.x, -10 - pPos.z);
+          if (distToPetDen < 3.4) {
+            prompt = {
+              text: 'Enter Pet Sanctuary (Pet Den)',
+              action: () => stateRef.current.onEnterPetDen?.(),
+            };
+          }
+        }
+
+        // 3. Check Barnaby's Seed Stall (7, 0, -2)
         if (!prompt) {
           const distToStall = Math.hypot(7 - pPos.x, -2 - pPos.z);
           if (distToStall < 3.2) {
@@ -2598,7 +3371,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
 
-        // 3. Check Farm Plots
+        // 4. Check Farm Plots
         if (!prompt) {
           for (const plot of stateRef.current.farmPlots) {
             const dist = Math.hypot(plot.x - pPos.x, plot.z - pPos.z);
@@ -2678,37 +3451,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
 
-        // 4. Check Pets
+        // 5. Check Pets in Farm
         if (!prompt) {
           for (const pet of stateRef.current.pets) {
+            if (!pet.unlocked) continue;
             const mesh = petMeshMap.get(pet.id);
-            if (mesh && mesh.position.distanceTo(pPos) < 2.2) {
+            if (mesh && mesh.position.distanceTo(pPos) < 2.5) {
               prompt = {
-                text: `Pet & Feed ${pet.name}`,
-                action: () => {
-                  soundEngine.playPetJoy();
-                  particleSys.spawnPetAffection(mesh.position);
-                  stateRef.current.onUpdatePets((prev) =>
-                    prev.map((p) =>
-                      p.id === pet.id
-                        ? {
-                            ...p,
-                            happiness: Math.min(100, p.happiness + 15),
-                            hunger: Math.min(100, p.hunger + 25),
-                            exp: p.exp + 20,
-                          }
-                        : p
-                    )
-                  );
-                  stateRef.current.onShowMessage(`${pet.name} is delighted! (+Happiness, +Hunger)`);
-                },
+                text: `Interact with ${pet.name}`,
+                action: () => stateRef.current.onOpenPetInteraction?.(pet.id),
               };
               break;
             }
           }
         }
 
-        // 5. Check Well
+        // 6. Check Well
         if (!prompt && Math.hypot(well.position.x - pPos.x, well.position.z - pPos.z) < 2.5) {
           prompt = {
             text: 'Draw Fresh Water',
@@ -2719,7 +3477,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           };
         }
 
-        // 6. Check Farmhouse
+        // 7. Check Farmhouse
         if (!prompt && Math.hypot(farmhouse.position.x - pPos.x, farmhouse.position.z + 10 - pPos.z) < 3.2) {
           prompt = {
             text: 'Rest at Farmhouse (New Day)',
@@ -2741,6 +3499,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               stateRef.current.onShowMessage('A new sunny morning begins at Pet Haven! (Health restored)');
             },
           };
+        }
+
+        stateRef.current.onNearInteractableChange(prompt);
+      } else if (currentLoc === 'pet_den') {
+        const pPos = playerPhysics.pos;
+        let prompt: { text: string; action: () => void } | null = null;
+
+        // 1. Check Return Archway to Farm (0, 0, -14.5)
+        const distToReturn = Math.hypot(0 - pPos.x, -14.5 - pPos.z);
+        if (distToReturn < 3.4) {
+          prompt = {
+            text: 'Return to Farm',
+            action: () => stateRef.current.onLeavePetDen?.(),
+          };
+        }
+
+        // 2. Check Sanctuary Pets
+        if (!prompt) {
+          for (const pet of stateRef.current.pets) {
+            if (!pet.unlocked) continue;
+            const mesh = petMeshMap.get(pet.id);
+            if (mesh && mesh.position.distanceTo(pPos) < 2.5) {
+              prompt = {
+                text: `Interact with ${pet.name}`,
+                action: () => stateRef.current.onOpenPetInteraction?.(pet.id),
+              };
+              break;
+            }
+          }
         }
 
         stateRef.current.onNearInteractableChange(prompt);

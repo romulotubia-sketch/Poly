@@ -12,8 +12,10 @@ import { PetEssenceShopModal } from './components/PetEssenceShopModal';
 import { InstancePortalModal } from './components/InstancePortalModal';
 import { InstanceResultModal } from './components/InstanceResultModal';
 import { DuplicateNotificationModal } from './components/DuplicateNotificationModal';
+import { NourishmentModal } from './components/NourishmentModal';
+import { PetInteractionModal } from './components/PetInteractionModal';
 import { PetData, FarmPlotState, PlayerStats, EssenceShopItem, GraphicsQuality, PerformanceStatsData } from './types/game';
-import { INITIAL_PETS, INITIAL_FARM_PLOTS, INITIAL_INVENTORY, DUPLICATE_ESSENCE_VALUES, CROPS } from './game/constants';
+import { INITIAL_PETS, INITIAL_FARM_PLOTS, INITIAL_INVENTORY, DUPLICATE_ESSENCE_VALUES, CROPS, INITIAL_NOURISHMENT, NOURISHMENT_CONFIGS } from './game/constants';
 import { soundEngine } from './audio/soundEngine';
 import { computeActiveSkillStats } from './game/combatSkills';
 import { PortalTheme } from './game/portalSystem';
@@ -47,6 +49,9 @@ export default function App() {
             maxHealth: parsed.player.maxHealth ?? 100,
             highestWaveCleared: parsed.player.highestWaveCleared ?? 0,
             totalInstancesCleared: parsed.player.totalInstancesCleared ?? 0,
+            nourishment: parsed.player.nourishment
+              ? { ...INITIAL_NOURISHMENT, ...parsed.player.nourishment }
+              : INITIAL_NOURISHMENT,
           };
         }
       }
@@ -66,6 +71,7 @@ export default function App() {
       equippedSkillSlots: ['pet_fox', 'pet_turtle', 'pet_rabbit', 'pet_owl', 'pet_bear'],
       highestWaveCleared: 0,
       totalInstancesCleared: 0,
+      nourishment: INITIAL_NOURISHMENT,
     };
   });
 
@@ -75,12 +81,16 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.pets && Array.isArray(parsed.pets)) {
+          const defaultEquipped = ['pet_fox', 'pet_turtle', 'pet_rabbit', 'pet_owl', 'pet_bear'];
+          const equippedSlots: string[] = parsed.player?.equippedSkillSlots || defaultEquipped;
           return INITIAL_PETS.map((init) => {
             const savedPet = parsed.pets.find((p: PetData) => p.id === init.id);
             if (savedPet) {
+              const shouldFollow = equippedSlots.includes(init.id) || (savedPet.isFollowing ?? init.isFollowing);
               return {
                 ...init,
                 ...savedPet,
+                isFollowing: shouldFollow,
                 species: init.species,
                 color: init.color,
                 activeSkill: {
@@ -129,8 +139,8 @@ export default function App() {
     return INITIAL_INVENTORY;
   });
 
-  // Location State ('farm' or 'wild_grounds')
-  const [currentLocation, setCurrentLocation] = useState<'farm' | 'wild_grounds'>('farm');
+  // Location State ('farm', 'wild_grounds', or 'pet_den')
+  const [currentLocation, setCurrentLocation] = useState<'farm' | 'wild_grounds' | 'pet_den'>('farm');
   const [portalTheme, setPortalTheme] = useState<PortalTheme>('normal');
   const [isWarpingTransition, setIsWarpingTransition] = useState<boolean>(false);
 
@@ -150,6 +160,8 @@ export default function App() {
   // UI Modals & Views
   const [showPetModal, setShowPetModal] = useState(false);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [showNourishmentModal, setShowNourishmentModal] = useState(false);
+  const [interactingPetId, setInteractingPetId] = useState<string | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSeedShopModal, setShowSeedShopModal] = useState(false);
   const [showSeedPickerModal, setShowSeedPickerModal] = useState(false);
@@ -509,6 +521,205 @@ export default function App() {
     }, 450);
   };
 
+  // Permanent Character Nourishment Consumption Handler
+  const handleConsumeCrop = useCallback(
+    (cropId: string, count: number = 1) => {
+      const available = inventory[cropId] || 0;
+      if (available < count || count <= 0) {
+        showMessage('You do not have enough crops to consume.');
+        return;
+      }
+
+      const cfg = NOURISHMENT_CONFIGS[cropId];
+      if (!cfg) return;
+
+      const currentBonuses = player.nourishment || INITIAL_NOURISHMENT;
+      const currentVal = currentBonuses[cfg.statKey];
+
+      // Calculate how many can actually be consumed before hitting the cap
+      const remainingCapacity = Math.max(0, cfg.maxBonus - currentVal);
+      const bonusPerItem = cfg.bonusPerCrop;
+      const maxPossibleToConsume = Math.min(count, Math.ceil(remainingCapacity / bonusPerItem));
+
+      if (remainingCapacity <= 0 || maxPossibleToConsume <= 0) {
+        showMessage(`Your ${cfg.statName} bonus is already at the maximum capacity (+${cfg.maxBonus}${cfg.unit})!`);
+        return;
+      }
+
+      const actualConsumeCount = Math.min(count, maxPossibleToConsume);
+      const addedBonus = Number(Math.min(remainingCapacity, actualConsumeCount * bonusPerItem).toFixed(2));
+      const nextVal = Number(Math.min(cfg.maxBonus, currentVal + addedBonus).toFixed(2));
+
+      // Remove crops from inventory
+      handleAddInventory(cropId, -actualConsumeCount);
+
+      // Apply bonus immediately to player stats
+      setPlayer((prev) => {
+        const nextNourishment = {
+          ...(prev.nourishment || INITIAL_NOURISHMENT),
+          [cfg.statKey]: nextVal,
+        };
+
+        const updated: PlayerStats = {
+          ...prev,
+          nourishment: nextNourishment,
+        };
+
+        // If carrot, increase maxHealth and restore health accordingly
+        if (cropId === 'carrot') {
+          const newMaxHealth = Number((100 + nextVal).toFixed(1));
+          updated.maxHealth = newMaxHealth;
+          updated.health = Math.min(newMaxHealth, (prev.health || 100) + addedBonus);
+        }
+
+        return updated;
+      });
+
+      soundEngine.playBuySuccess();
+      showMessage(
+        `Nourished! Consumed ${actualConsumeCount}x ${cfg.name} (+${addedBonus}${cfg.unit} ${cfg.statName})! Total bonus: +${nextVal}${cfg.unit}`
+      );
+    },
+    [inventory, player.nourishment, handleAddInventory, showMessage]
+  );
+
+  // Enter Pet Den (Sanctuary)
+  const handleEnterPetDen = useCallback(() => {
+    setIsWarpingTransition(true);
+    soundEngine.playPortalWarp();
+    window.setTimeout(() => {
+      setCurrentLocation('pet_den');
+      window.setTimeout(() => {
+        setIsWarpingTransition(false);
+      }, 350);
+    }, 450);
+  }, []);
+
+  // Leave Pet Den back to Farm
+  const handleLeavePetDen = useCallback(() => {
+    setIsWarpingTransition(true);
+    soundEngine.playPortalWarp();
+    window.setTimeout(() => {
+      setCurrentLocation('farm');
+      window.setTimeout(() => {
+        setIsWarpingTransition(false);
+      }, 350);
+    }, 450);
+  }, []);
+
+  // Feed Pet from Interaction Modal
+  const handleFeedPetFromInteraction = useCallback(
+    (petId: string, cropId: string) => {
+      const available = inventory[cropId] || 0;
+      if (available <= 0) {
+        showMessage('You do not have any of this crop to feed!');
+        return;
+      }
+
+      handleAddInventory(cropId, -1);
+      soundEngine.playHarvest();
+
+      setPets((prev) =>
+        prev.map((pet) => {
+          if (pet.id === petId) {
+            const addedExp = 35;
+            const newExp = pet.exp + addedExp;
+            let newLevel = pet.level;
+            let newMaxExp = pet.maxExp;
+            let remainingExp = newExp;
+
+            if (newExp >= pet.maxExp) {
+              newLevel += 1;
+              remainingExp = newExp - pet.maxExp;
+              newMaxExp = Math.round(pet.maxExp * 1.3);
+              soundEngine.playLevelUp();
+              showMessage(`✨ ${pet.name} leveled up to Lv ${newLevel}!`);
+            } else {
+              showMessage(`Fed ${pet.name} fresh ${cropId}! (+35 EXP, +Happiness)`);
+            }
+
+            return {
+              ...pet,
+              level: newLevel,
+              exp: remainingExp,
+              maxExp: newMaxExp,
+              happiness: Math.min(100, pet.happiness + 25),
+              hunger: Math.min(100, pet.hunger + 35),
+            };
+          }
+          return pet;
+        })
+      );
+    },
+    [inventory, handleAddInventory, showMessage]
+  );
+
+  // Pet the Pet from Interaction Modal
+  const handlePetPetFromInteraction = useCallback(
+    (petId: string) => {
+      const pet = pets.find((p) => p.id === petId);
+      if (!pet) return;
+
+      soundEngine.playPetJoy();
+      setPets((prev) =>
+        prev.map((p) => {
+          if (p.id === petId) {
+            const addedExp = 15;
+            const newExp = p.exp + addedExp;
+            let newLevel = p.level;
+            let newMaxExp = p.maxExp;
+            let remainingExp = newExp;
+
+            if (newExp >= p.maxExp) {
+              newLevel += 1;
+              remainingExp = newExp - p.maxExp;
+              newMaxExp = Math.round(p.maxExp * 1.3);
+              soundEngine.playLevelUp();
+              showMessage(`✨ ${p.name} leveled up to Lv ${newLevel}!`);
+            } else {
+              showMessage(`Gave loving pats to ${p.name}! (+Affection)`);
+            }
+
+            return {
+              ...p,
+              level: newLevel,
+              exp: remainingExp,
+              maxExp: newMaxExp,
+              happiness: Math.min(100, p.happiness + 20),
+            };
+          }
+          return p;
+        })
+      );
+    },
+    [pets, showMessage]
+  );
+
+  // Toggle Following from Interaction Modal
+  const handleToggleFollowFromInteraction = useCallback(
+    (petId: string) => {
+      const pet = pets.find((p) => p.id === petId);
+      if (!pet) return;
+
+      const followingCount = pets.filter((p) => p.isFollowing).length;
+      if (!pet.isFollowing && followingCount >= 5) {
+        showMessage('You can have at most 5 following companions active at once!');
+        return;
+      }
+
+      setPets((prev) =>
+        prev.map((p) => (p.id === petId ? { ...p, isFollowing: !p.isFollowing } : p))
+      );
+      soundEngine.playBuySuccess();
+      showMessage(
+        !pet.isFollowing
+          ? `${pet.name} is now adventuring at your side!`
+          : `${pet.name} is resting happily in the sanctuary.`
+      );
+    },
+    [pets, showMessage]
+  );
+
   // Instance Victory Handler
   const handleInstanceVictory = (res: { wavesCleared: number; essenceEarned: number; goldEarned: number }) => {
     setPlayer((prev) => ({
@@ -613,6 +824,9 @@ export default function App() {
         onInstanceDefeat={handleInstanceDefeat}
         onOpenSeedShop={() => setShowSeedShopModal(true)}
         onOpenPortalModal={() => setShowPortalModal(true)}
+        onEnterPetDen={handleEnterPetDen}
+        onLeavePetDen={handleLeavePetDen}
+        onOpenPetInteraction={(petId) => setInteractingPetId(petId)}
         onOpenSeedPicker={(plotId) => {
           setActivePlotForSeedPicker(plotId);
           setShowSeedPickerModal(true);
@@ -632,10 +846,13 @@ export default function App() {
         nearInteractable={nearInteractable}
         onOpenPets={() => setShowPetModal(true)}
         onOpenInventory={() => setShowInventoryModal(true)}
+        onOpenNourishment={() => setShowNourishmentModal(true)}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenSeedShop={() => setShowSeedShopModal(true)}
         onOpenEssenceShop={() => setShowEssenceShopModal(true)}
         onLeaveInstance={handleReturnToFarm}
+        onEnterPetDen={handleEnterPetDen}
+        onLeavePetDen={handleLeavePetDen}
         currentLocation={currentLocation}
         currentWave={waveInfo.wave}
         waveTitle={waveInfo.title}
@@ -686,6 +903,34 @@ export default function App() {
           onAddInventory={handleAddInventory}
           onUpdatePlayer={setPlayer}
           onShowMessage={showMessage}
+          onConsumeCrop={handleConsumeCrop}
+        />
+      )}
+
+      {/* Permanent Character Nourishment Modal */}
+      {showNourishmentModal && (
+        <NourishmentModal
+          player={player}
+          inventory={inventory}
+          onClose={() => setShowNourishmentModal(false)}
+          onConsumeCrop={handleConsumeCrop}
+        />
+      )}
+
+      {/* 3D Pet Interaction Dialog Modal */}
+      {interactingPetId && pets.find((p) => p.id === interactingPetId) && (
+        <PetInteractionModal
+          pet={pets.find((p) => p.id === interactingPetId)!}
+          player={player}
+          inventory={inventory}
+          onClose={() => setInteractingPetId(null)}
+          onFeedPet={handleFeedPetFromInteraction}
+          onPetPet={handlePetPetFromInteraction}
+          onToggleFollow={handleToggleFollowFromInteraction}
+          onOpenFullInfo={() => {
+            setInteractingPetId(null);
+            setShowPetModal(true);
+          }}
         />
       )}
 
@@ -776,7 +1021,11 @@ export default function App() {
                 Dimensional Rift Transition
               </span>
               <p className="text-[11px] text-indigo-200 font-semibold">
-                {currentLocation === 'farm' ? 'Entering Wild Grounds...' : 'Returning to Pet Haven Farm...'}
+                {currentLocation === 'pet_den'
+                  ? 'Entering Pet Sanctuary (Pet Den)...'
+                  : currentLocation === 'wild_grounds'
+                  ? 'Entering Wild Grounds...'
+                  : 'Returning to Pet Haven Farm...'}
               </p>
             </div>
           </div>

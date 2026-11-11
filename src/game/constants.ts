@@ -1,5 +1,94 @@
-import { PetData, CropDefinition, FarmPlotState, EssenceShopItem, InstanceWaveConfig, PetRarity } from '../types/game';
+import { PetData, CropDefinition, FarmPlotState, EssenceShopItem, InstanceWaveConfig, PetRarity, NourishmentBonuses } from '../types/game';
 import { formatSkillLevelBonus } from './combatSkills';
+
+export const INITIAL_NOURISHMENT: NourishmentBonuses = {
+  carrotsConsumed: 0,
+  tomatoesConsumed: 0,
+  strawberriesConsumed: 0,
+  cornConsumed: 0,
+  pumpkinsConsumed: 0,
+  maxHpBonus: 0,
+  attackDamagePct: 0,
+  critChancePct: 0,
+  moveSpeedPct: 0,
+  defensePct: 0,
+};
+
+export interface CropNourishmentConfig {
+  cropId: string;
+  name: string;
+  statName: string;
+  statKey: 'maxHpBonus' | 'attackDamagePct' | 'critChancePct' | 'moveSpeedPct' | 'defensePct';
+  bonusPerCrop: number;
+  maxBonus: number;
+  unit: string;
+  description: string;
+  icon: string;
+  consumedKey: 'carrotsConsumed' | 'tomatoesConsumed' | 'strawberriesConsumed' | 'cornConsumed' | 'pumpkinsConsumed';
+}
+
+export const NOURISHMENT_CONFIGS: Record<string, CropNourishmentConfig> = {
+  carrot: {
+    cropId: 'carrot',
+    name: 'Sweet Carrot',
+    statName: 'Maximum HP',
+    statKey: 'maxHpBonus',
+    bonusPerCrop: 0.1,
+    maxBonus: 100,
+    unit: 'HP',
+    description: '+0.1 maximum HP per consumption',
+    icon: '🥕',
+    consumedKey: 'carrotsConsumed',
+  },
+  tomato: {
+    cropId: 'tomato',
+    name: 'Juicy Tomato',
+    statName: 'Attack Damage',
+    statKey: 'attackDamagePct',
+    bonusPerCrop: 0.1,
+    maxBonus: 20,
+    unit: '%',
+    description: '+0.1% attack damage per consumption',
+    icon: '🍅',
+    consumedKey: 'tomatoesConsumed',
+  },
+  strawberry: {
+    cropId: 'strawberry',
+    name: 'Sugar Berry',
+    statName: 'Critical Hit Chance',
+    statKey: 'critChancePct',
+    bonusPerCrop: 0.1,
+    maxBonus: 10,
+    unit: '%',
+    description: '+0.1% critical hit chance per consumption',
+    icon: '🍓',
+    consumedKey: 'strawberriesConsumed',
+  },
+  corn: {
+    cropId: 'corn',
+    name: 'Golden Corn',
+    statName: 'Movement Speed',
+    statKey: 'moveSpeedPct',
+    bonusPerCrop: 0.1,
+    maxBonus: 10,
+    unit: '%',
+    description: '+0.1% movement speed per consumption',
+    icon: '🌽',
+    consumedKey: 'cornConsumed',
+  },
+  pumpkin: {
+    cropId: 'pumpkin',
+    name: 'Harvest Pumpkin',
+    statName: 'Defense Resistance',
+    statKey: 'defensePct',
+    bonusPerCrop: 0.1,
+    maxBonus: 20,
+    unit: '%',
+    description: '+0.1% defense per consumption',
+    icon: '🎃',
+    consumedKey: 'pumpkinsConsumed',
+  },
+};
 
 // Duplicate Conversion Values as specified:
 // Common: 5 Essence, Uncommon: 10 Essence, Rare: 25 Essence, Epic: 60 Essence, Legendary: 150 Essence, Mythical: 350 Essence
@@ -60,7 +149,7 @@ export const INITIAL_PETS: PetData[] = [
     maxExp: 100,
     happiness: 85,
     hunger: 90,
-    isFollowing: false,
+    isFollowing: true,
     color: '#2a9d8f',
     accentColor: '#8ab17d',
     unlocked: true,
@@ -97,7 +186,7 @@ export const INITIAL_PETS: PetData[] = [
     maxExp: 100,
     happiness: 95,
     hunger: 70,
-    isFollowing: false,
+    isFollowing: true,
     color: '#e9c46a',
     accentColor: '#f7ede2',
     unlocked: true,
@@ -133,7 +222,7 @@ export const INITIAL_PETS: PetData[] = [
     maxExp: 120,
     happiness: 80,
     hunger: 85,
-    isFollowing: false,
+    isFollowing: true,
     color: '#7b2cbf',
     accentColor: '#9d4edd',
     unlocked: true,
@@ -169,7 +258,7 @@ export const INITIAL_PETS: PetData[] = [
     maxExp: 130,
     happiness: 88,
     hunger: 75,
-    isFollowing: false,
+    isFollowing: true,
     color: '#7f4f24',
     accentColor: '#a68a64',
     unlocked: true,

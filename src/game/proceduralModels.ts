@@ -1741,3 +1741,228 @@ export function createPetModel(species: string): PetMeshGroup {
   }
 }
 
+// --- PET DEN / PET SANCTUARY PROCEDURAL MODELS ---
+
+export function createPetHouse(): THREE.Group {
+  const house = new THREE.Group();
+  house.name = 'pet_house';
+
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0xa67c52, roughness: 0.85 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x9e2a2b, roughness: 0.75 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xffeedd, roughness: 0.8 });
+  const darkInteriorMat = new THREE.MeshStandardMaterial({ color: 0x2b1e17, roughness: 0.95 });
+
+  // Main body box
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 1.8), woodMat);
+  body.position.set(0, 0.6, 0);
+  body.castShadow = true;
+  body.receiveShadow = true;
+
+  // Doorway opening cutout simulation
+  const doorHole = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.05), darkInteriorMat);
+  doorHole.position.set(0, 0.45, 0.91);
+
+  const doorArch = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.05, 12, 1, false, 0, Math.PI), trimMat);
+  doorArch.position.set(0, 0.9, 0.91);
+  doorArch.rotation.z = Math.PI;
+
+  // Roof Left slope
+  const roofL = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.08, 2.05), roofMat);
+  roofL.position.set(-0.48, 1.48, 0);
+  roofL.rotation.z = Math.PI / 4.2;
+  roofL.castShadow = true;
+
+  // Roof Right slope
+  const roofR = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.08, 2.05), roofMat);
+  roofR.position.set(0.48, 1.48, 0);
+  roofR.rotation.z = -Math.PI / 4.2;
+  roofR.castShadow = true;
+
+  // Front gable triangle
+  const gableGeo = new THREE.BufferGeometry();
+  const gableVertices = new Float32Array([
+    -0.8, 1.2, 0.9,
+     0.8, 1.2, 0.9,
+     0.0, 1.85, 0.9,
+  ]);
+  gableGeo.setAttribute('position', new THREE.BufferAttribute(gableVertices, 3));
+  gableGeo.computeVertexNormals();
+  const frontGable = new THREE.Mesh(gableGeo, woodMat);
+
+  // Little cute sign plate above doorway
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.18, 0.06), trimMat);
+  sign.position.set(0, 1.05, 0.94);
+
+  // Soft straw bedding poking out
+  const strawMat = new THREE.MeshStandardMaterial({ color: 0xf4a261, roughness: 0.95 });
+  const straw = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.06, 0.4), strawMat);
+  straw.position.set(0, 0.03, 0.92);
+
+  house.add(body, doorHole, doorArch, roofL, roofR, frontGable, sign, straw);
+  return house;
+}
+
+export function createFoodBowl(): THREE.Group {
+  const bowlGroup = new THREE.Group();
+  bowlGroup.name = 'food_bowl';
+
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.8 });
+  const foodMat = new THREE.MeshStandardMaterial({ color: 0xc8963e, roughness: 0.9 });
+  const berryMat = new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.5 });
+
+  // Wooden outer bowl
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.28, 0.18, 12), woodMat);
+  bowl.position.set(0, 0.09, 0);
+  bowl.castShadow = true;
+
+  // Kibble mounds
+  const food = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), foodMat);
+  food.position.set(0, 0.14, 0);
+
+  // A couple of tasty red berries on top
+  for (let i = 0; i < 3; i++) {
+    const ang = (i * Math.PI * 2) / 3;
+    const berry = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), berryMat);
+    berry.position.set(Math.cos(ang) * 0.14, 0.25, Math.sin(ang) * 0.14);
+    bowlGroup.add(berry);
+  }
+
+  bowlGroup.add(bowl, food);
+  return bowlGroup;
+}
+
+export function createWaterBowl(): THREE.Group {
+  const bowlGroup = new THREE.Group();
+  bowlGroup.name = 'water_bowl';
+
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6c757d, roughness: 0.7 });
+  const waterMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    roughness: 0.05,
+    metalness: 0.3,
+    transparent: true,
+    opacity: 0.9,
+  });
+
+  // Ceramic/stone bowl
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.28, 0.18, 12), stoneMat);
+  bowl.position.set(0, 0.09, 0);
+  bowl.castShadow = true;
+
+  // Glistening water disc
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.02, 12), waterMat);
+  water.position.set(0, 0.15, 0);
+
+  bowlGroup.add(bowl, water);
+  return bowlGroup;
+}
+
+export function createPetBed(): THREE.Group {
+  const bedGroup = new THREE.Group();
+  bedGroup.name = 'pet_bed';
+
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x7f4f24, roughness: 0.85 });
+  const cushionMat = new THREE.MeshStandardMaterial({ color: 0x588157, roughness: 0.9 });
+  const blanketMat = new THREE.MeshStandardMaterial({ color: 0xe9c46a, roughness: 0.85 });
+
+  // Wooden circular border rim
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.2, 16), woodMat);
+  rim.position.set(0, 0.1, 0);
+  rim.castShadow = true;
+
+  // Soft plump cushion
+  const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.78, 0.18, 16), cushionMat);
+  cushion.position.set(0, 0.14, 0);
+
+  // Warm folded blanket
+  const blanket = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.45), blanketMat);
+  blanket.position.set(0.2, 0.23, 0.1);
+  blanket.rotation.y = 0.25;
+
+  bedGroup.add(rim, cushion, blanket);
+  return bedGroup;
+}
+
+export function createPlayBall(color = 0xff0054): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'play_ball';
+
+  const ballMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.3 });
+
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 12), ballMat);
+  ball.position.set(0, 0.28, 0);
+  ball.castShadow = true;
+
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.285, 0.285, 0.06, 12), stripeMat);
+  stripe.position.set(0, 0.28, 0);
+
+  group.add(ball, stripe);
+  return group;
+}
+
+export function createSanctuaryArchway(title: string): THREE.Group {
+  const arch = new THREE.Group();
+  arch.name = 'sanctuary_arch';
+
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x6f4e37, roughness: 0.85 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x38b000, roughness: 0.85 });
+  const flowerMat = new THREE.MeshStandardMaterial({ color: 0xff4d6d, roughness: 0.6 });
+  const signMat = new THREE.MeshStandardMaterial({ color: 0xfefae0, roughness: 0.8 });
+  const lanternMat = new THREE.MeshStandardMaterial({
+    color: 0xffb703,
+    emissive: 0xffaa00,
+    emissiveIntensity: 0.8,
+    roughness: 0.2,
+  });
+
+  // Left Post
+  const postL = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 3.4, 8), woodMat);
+  postL.position.set(-1.8, 1.7, 0);
+  postL.castShadow = true;
+
+  // Right Post
+  const postR = postL.clone();
+  postR.position.set(1.8, 1.7, 0);
+
+  // Top Curved Beam
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.32, 0.4), woodMat);
+  beam.position.set(0, 3.4, 0);
+  beam.castShadow = true;
+
+  // Wooden Signboard with Title
+  const signboard = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.65, 0.12), signMat);
+  signboard.position.set(0, 3.2, 0.15);
+  signboard.castShadow = true;
+
+  // Flowering Vines wrap around posts
+  for (let y = 0.5; y <= 3.2; y += 0.5) {
+    const vineL = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6), leafMat);
+    vineL.position.set(-1.8 + (Math.random() - 0.5) * 0.15, y, (Math.random() - 0.5) * 0.2);
+    const flowerL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 5, 5), flowerMat);
+    flowerL.position.set(-1.75, y + 0.1, 0.18);
+
+    const vineR = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6), leafMat);
+    vineR.position.set(1.8 + (Math.random() - 0.5) * 0.15, y, (Math.random() - 0.5) * 0.2);
+    const flowerR = new THREE.Mesh(new THREE.SphereGeometry(0.08, 5, 5), flowerMat);
+    flowerR.position.set(1.75, y + 0.1, 0.18);
+
+    arch.add(vineL, flowerL, vineR, flowerR);
+  }
+
+  // Hanging Lantern from beam
+  const lanternPost = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 6), woodMat);
+  lanternPost.position.set(-1.2, 3.0, 0);
+  const lanternGlass = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.32, 0.22), lanternMat);
+  lanternGlass.position.set(-1.2, 2.7, 0);
+
+  const lanternPostR = lanternPost.clone();
+  lanternPostR.position.set(1.2, 3.0, 0);
+  const lanternGlassR = lanternGlass.clone();
+  lanternGlassR.position.set(1.2, 2.7, 0);
+
+  arch.add(postL, postR, beam, signboard, lanternPost, lanternGlass, lanternPostR, lanternGlassR);
+  return arch;
+}
+
+
