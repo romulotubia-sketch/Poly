@@ -66,6 +66,10 @@ export interface PetAnimContext {
   isDefeat: boolean;
   animTime: number;
   slotIndex: number;
+  isBasicAttacking?: boolean;
+  basicAttackTimer?: number;
+  basicAttackPhase?: 'windup' | 'strike' | 'recovery';
+  combatState?: string;
 }
 
 export interface FarmObstacle {
@@ -481,6 +485,21 @@ export class PetAnimator {
       }
     }
 
+    // Basic Attack: Quick forward bite/paw swipe
+    if (ctx.isBasicAttacking) {
+      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
+      mesh.position.y = 0.08 + Math.abs(strikeProgress) * 0.12;
+      if (head) head.rotation.x = -0.3 + strikeProgress * 0.45;
+      if (tail) tail.rotation.y = Math.sin(anim * 26) * 0.6;
+      if (legs && legs.length >= 4) {
+        legs[0].rotation.x = -0.7 * strikeProgress;
+        legs[1].rotation.x = 0.7 * strikeProgress;
+        legs[2].rotation.x = 0.3;
+        legs[3].rotation.x = 0.3;
+      }
+      return;
+    }
+
     // Damage Flinch
     if (ctx.isTakingDamage && ctx.damageTimer > 0) {
       const flinch = Math.sin((ctx.damageTimer / 0.25) * Math.PI);
@@ -587,6 +606,15 @@ export class PetAnimator {
       }
     }
 
+    // Basic Attack: Short-range head/shell thrust strike
+    if (ctx.isBasicAttacking) {
+      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
+      if (head) head.position.z = 0.42 + strikeProgress * 0.25;
+      if (body) body.rotation.x = strikeProgress * 0.2;
+      mesh.scale.set(1.1, 0.95, 1.15);
+      return;
+    }
+
     // Hit Reaction: pulls head back into shell defensively
     if (ctx.isTakingDamage && ctx.damageTimer > 0) {
       if (head) head.position.z = 0.22;
@@ -659,6 +687,23 @@ export class PetAnimator {
         mesh.scale.set(0.8, 1.45, 0.8); // High stretch in flight
         return;
       }
+    }
+
+    // Basic Attack: Quick hop forward into double kick strike
+    if (ctx.isBasicAttacking) {
+      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
+      mesh.position.y = Math.abs(strikeProgress) * 0.28;
+      if (ears) {
+        ears[0].rotation.x = -0.5 * strikeProgress;
+        ears[1].rotation.x = -0.5 * strikeProgress;
+      }
+      if (legs && legs.length >= 4) {
+        legs[0].rotation.x = -0.8 * strikeProgress;
+        legs[1].rotation.x = -0.8 * strikeProgress;
+        legs[2].rotation.x = 0.8 * strikeProgress;
+        legs[3].rotation.x = 0.8 * strikeProgress;
+      }
+      return;
     }
 
     if (isMoving) {
@@ -744,6 +789,18 @@ export class PetAnimator {
       return;
     }
 
+    // Basic Attack: Aerodynamic wing dive & beak peck
+    if (ctx.isBasicAttacking) {
+      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
+      mesh.position.y = baseHoverY + strikeProgress * 0.18;
+      if (wings && wings.length >= 2) {
+        wings[0].rotation.z = -0.3 - strikeProgress * 0.9;
+        wings[1].rotation.z = 0.3 + strikeProgress * 0.9;
+      }
+      if (head) head.rotation.x = strikeProgress * 0.4;
+      return;
+    }
+
     if (isMoving) {
       // Aerodynamic flight: banking into turns, wing flap cycle
       const flapFreq = speed * 2.4;
@@ -826,6 +883,18 @@ export class PetAnimator {
       }
     }
 
+    // Basic Attack: Heavy paw strike slamming down
+    if (ctx.isBasicAttacking) {
+      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
+      mesh.position.y = Math.abs(strikeProgress) * 0.12;
+      if (body) body.rotation.y = strikeProgress * 0.3;
+      if (legs && legs.length >= 4) {
+        legs[0].rotation.x = -1.2 * strikeProgress;
+        legs[1].rotation.x = 0.4;
+      }
+      return;
+    }
+
     if (body) body.rotation.x = THREE.MathUtils.damp(body.rotation.x, 0, 10, delta);
 
     if (isMoving) {
@@ -889,6 +958,19 @@ export class PetAnimator {
         mesh.scale.set(1.4, 0.7, 1.4);
         return;
       }
+    }
+
+    // Basic Attack: Cartoon body bounce slam
+    if (ctx.isBasicAttacking) {
+      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
+      if (strikeProgress > 0) {
+        mesh.position.y = strikeProgress * 0.3;
+        mesh.scale.set(0.85, 1.25, 0.85);
+      } else {
+        mesh.position.y = 0;
+        mesh.scale.set(1.3, 0.7, 1.3);
+      }
+      return;
     }
 
     if (isMoving) {

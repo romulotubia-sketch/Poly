@@ -268,6 +268,34 @@ export default function App() {
     }, 3500);
   }, []);
 
+  // Time Phase state for day/night HUD display
+  const [timePhase, setTimePhase] = useState<'morning' | 'day' | 'sunset' | 'night'>('day');
+
+  // Auto Hunt Mode State for Wild Grounds
+  const [isAutoHunt, setIsAutoHunt] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('pet_haven_auto_hunt') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [playerTargetInfo, setPlayerTargetInfo] = useState<{ id: string; name: string; hpRatio: number; maxHealth?: number; health?: number } | null>(null);
+  const [petsEngagedCount, setPetsEngagedCount] = useState<number>(0);
+
+  const handleToggleAutoHunt = useCallback(() => {
+    setIsAutoHunt((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('pet_haven_auto_hunt', String(next));
+      } catch {
+        // ignore
+      }
+      showMessage(next ? '⚔️ Auto Hunt Activated! Player and pets are engaging enemies!' : '🛡️ Auto Hunt Deactivated. Manual control restored.');
+      return next;
+    });
+  }, [showMessage]);
+
   // Inventory Helper
   const handleAddInventory = useCallback((itemId: string, count: number) => {
     setInventory((prev) => {
@@ -835,6 +863,13 @@ export default function App() {
         isWarping={isWarpingTransition}
         graphicsQuality={graphicsQuality}
         onPerfStatsChange={setPerfStats}
+        onTimePhaseChange={(phase) => setTimePhase(phase)}
+        isAutoHunt={isAutoHunt}
+        onToggleAutoHunt={handleToggleAutoHunt}
+        onPlayerTargetChange={setPlayerTargetInfo}
+        onPetsEngagedChange={setPetsEngagedCount}
+        skillCooldowns={skillCooldowns}
+        onTriggerSkill={handleTriggerSkill}
       />
 
       {/* Main HUD overlay with 5 equipped skill slots and top bar */}
@@ -864,9 +899,14 @@ export default function App() {
         messageToast={messageToast}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
+        timePhase={timePhase}
         perfStats={perfStats}
         showPerfStats={showPerfStats}
         graphicsQuality={graphicsQuality}
+        isAutoHunt={isAutoHunt}
+        onToggleAutoHunt={handleToggleAutoHunt}
+        playerTargetInfo={playerTargetInfo}
+        petsEngagedCount={petsEngagedCount}
       />
 
       {/* Mobile touch controls (Virtual Joystick, Action & Jump buttons, Camera turning) */}

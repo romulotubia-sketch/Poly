@@ -109,6 +109,16 @@ export interface PlayerStats {
   highestWaveCleared: number; // Instance progression record
   totalInstancesCleared: number;
   nourishment?: NourishmentBonuses;
+  isAutoHunt?: boolean;
+}
+
+export interface CombatTargetInfo {
+  id: string;
+  name: string;
+  type: string;
+  health: number;
+  maxHealth: number;
+  hpRatio: number;
 }
 
 export interface EssenceShopItem {

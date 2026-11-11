@@ -545,6 +545,84 @@ class SoundEngine {
     osc.stop(now + 0.12);
   }
 
+  public playPetBasicAttack(species: string) {
+    if (!this.enabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    switch (species) {
+      case 'bear': {
+        // Heavy bass paw thud
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(35, now + 0.15);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        break;
+      }
+      case 'turtle': {
+        // Heavy water shell thud
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(260, now);
+        osc.frequency.exponentialRampToValueAtTime(60, now + 0.14);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        break;
+      }
+      case 'rabbit': {
+        // Snappy double hop strike
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(380, now);
+        osc.frequency.exponentialRampToValueAtTime(160, now + 0.09);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+        break;
+      }
+      case 'owl':
+      case 'phoenix': {
+        // Sharp wing slash / air whoosh
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(540, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.11);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+        break;
+      }
+      case 'slime':
+      case 'frog': {
+        // Bubbly squish pop
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(480, now + 0.07);
+        osc.frequency.exponentialRampToValueAtTime(140, now + 0.13);
+        gain.gain.setValueAtTime(0.24, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+        break;
+      }
+      case 'fox':
+      case 'wolf':
+      case 'dragon':
+      default: {
+        // Quick claw swipe / bite
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(110, now + 0.1);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        break;
+      }
+    }
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  }
+
   public playEnemyDefeat() {
     if (!this.enabled) return;
     this.initCtx();

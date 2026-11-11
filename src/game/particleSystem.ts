@@ -552,13 +552,46 @@ export class ParticleSystem {
     }
   }
 
+  public spawnPetBasicAttackHit(position: THREE.Vector3, species: string) {
+    let hitColor = 0xffa200;
+    switch (species) {
+      case 'fox': hitColor = 0xf97316; break;
+      case 'turtle': hitColor = 0x38bdf8; break;
+      case 'rabbit': hitColor = 0xfef08a; break;
+      case 'owl': hitColor = 0x2dd4bf; break;
+      case 'bear': hitColor = 0xb45309; break;
+      case 'slime': hitColor = 0xa855f7; break;
+      case 'wolf': hitColor = 0x818cf8; break;
+      case 'frog': hitColor = 0x34d399; break;
+      case 'deer': hitColor = 0x4ade80; break;
+      case 'dragon': hitColor = 0xef4444; break;
+      case 'phoenix': hitColor = 0xfacc15; break;
+    }
+    const count = this.getAdjustedCount(7);
+    const mat = new THREE.MeshBasicMaterial({ color: hitColor });
+    for (let i = 0; i < count; i++) {
+      const mesh = this.acquireMesh('spark', mat);
+      mesh.position.copy(position);
+      mesh.position.y += 0.45 + (Math.random() - 0.5) * 0.3;
+
+      this.addParticle({
+        mesh,
+        velocity: new THREE.Vector3((Math.random() - 0.5) * 5, Math.random() * 3.5 + 1.5, (Math.random() - 0.5) * 5),
+        life: 0,
+        maxLife: 0.28 + Math.random() * 0.18,
+        scaleDelta: -0.85,
+        poolType: 'spark',
+      });
+    }
+  }
+
   // --- REUSABLE CANVAS SPRITE POOL FOR FLOATING DAMAGE TEXTS (ZERO MEMORY LEAKS) ---
   public spawnDamageNumber(
     position: THREE.Vector3,
     amount: number | string,
     isCrit = false,
     isBoss = false,
-    type: 'damage' | 'heal' | 'shield' | 'burn' = 'damage'
+    type: 'damage' | 'heal' | 'shield' | 'burn' | 'pet' = 'damage'
   ) {
     // Find an unused sprite in the pre-allocated pool
     const item = this.damageSpritePool.find((s) => !s.inUse);
@@ -587,6 +620,13 @@ export class ParticleSystem {
       color = '#fb923c';
       stroke = '#7c2d12';
       fontSize = 30;
+    } else if (type === 'pet') {
+      text = `🐾 ${amount}`;
+      color = '#38bdf8';
+      stroke = '#0c4a6e';
+      fontSize = 30;
+      scaleW = 1.7;
+      scaleH = 0.65;
     } else if (isCrit) {
       text = `💥 CRIT! ${amount}`;
       color = '#fbbf24';

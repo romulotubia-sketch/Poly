@@ -55,6 +55,10 @@ interface HUDProps {
   perfStats?: PerformanceStatsData | null;
   showPerfStats?: boolean;
   graphicsQuality?: GraphicsQuality;
+  isAutoHunt?: boolean;
+  onToggleAutoHunt?: () => void;
+  playerTargetInfo?: { id: string; name: string; hpRatio: number; maxHealth?: number; health?: number } | null;
+  petsEngagedCount?: number;
 }
 
 const SKILL_ICONS: Record<string, React.FC<{ className?: string }>> = {
@@ -102,6 +106,10 @@ export const HUD: React.FC<HUDProps> = ({
   perfStats = null,
   showPerfStats = false,
   graphicsQuality = 'medium',
+  isAutoHunt = false,
+  onToggleAutoHunt,
+  playerTargetInfo = null,
+  petsEngagedCount = 0,
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
@@ -116,7 +124,7 @@ export const HUD: React.FC<HUDProps> = ({
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none overflow-hidden font-sans">
-      {/* Performance Monitor Floating Overlay (Requirement 5) */}
+      {/* Performance Monitor Floating Overlay */}
       {showPerfStats && perfStats && !isZenMode && (
         <aside
           aria-label="Performance Monitor"
@@ -177,10 +185,11 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
       )}
 
-      {/* Wild Grounds Wave Status Center Banner */}
+      {/* Wild Grounds Wave Status Center Banner with Auto Hunt and Target Info */}
       {currentLocation === 'wild_grounds' && !isZenMode && (
-        <div className="pointer-events-auto absolute top-14 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1">
-          <div className="bg-stone-950/90 border-2 border-indigo-500/60 rounded-2xl px-4 py-1.5 shadow-2xl flex items-center gap-3 backdrop-blur-sm">
+        <div className="pointer-events-auto absolute top-14 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5">
+          {/* Wave info banner */}
+          <div className="bg-stone-950/90 border-2 border-indigo-500/60 rounded-2xl px-3.5 py-1.5 shadow-2xl flex items-center gap-2.5 backdrop-blur-sm">
             <div className="flex items-center gap-1.5 text-indigo-300 font-black text-xs sm:text-sm uppercase tracking-wide">
               <span>WAVE {currentWave} / {totalWaves}</span>
               {waveTitle && <span className="text-stone-300 text-xs font-normal">({waveTitle})</span>}
@@ -194,6 +203,41 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="text-rose-400 font-bold text-xs flex items-center gap-1">
                 <span>Enemies:</span>
                 <span className="text-white font-black">{enemiesRemaining}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Auto Hunt Toggle Button & Combat Target / Pets Engaged Tracker */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onToggleAutoHunt}
+              className={`px-3.5 py-1 rounded-full font-black text-[11px] sm:text-xs tracking-wide shadow-xl flex items-center gap-1.5 border-2 transition-all cursor-pointer active:scale-95 ${
+                isAutoHunt
+                  ? 'bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 text-white border-emerald-300 shadow-emerald-500/40 ring-2 ring-emerald-400/50'
+                  : 'bg-stone-900/90 text-stone-300 border-stone-600/80 hover:bg-stone-800'
+              }`}
+              title="Toggle Auto Hunt (Player auto-chases & casts skills, pets attack independently)"
+            >
+              {isAutoHunt && <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping" />}
+              <span>{isAutoHunt ? '⚔️ AUTO ON' : '🛡️ AUTO OFF'}</span>
+            </button>
+
+            {/* Current Target indicator pill */}
+            {playerTargetInfo ? (
+              <div className="bg-stone-950/85 border border-amber-500/50 rounded-full px-2.5 py-1 text-[10px] text-stone-200 flex items-center gap-2 backdrop-blur-sm shadow">
+                <span className="text-amber-300 font-bold max-w-[90px] truncate">🎯 {playerTargetInfo.name}</span>
+                <div className="w-10 sm:w-14 h-1.5 bg-stone-800 rounded-full overflow-hidden border border-stone-700">
+                  <div
+                    className="h-full bg-rose-500 transition-all duration-150"
+                    style={{ width: `${Math.round(playerTargetInfo.hpRatio * 100)}%` }}
+                  />
+                </div>
+                <span className="text-[9px] text-emerald-300 font-medium">🐾 {petsEngagedCount} pets</span>
+              </div>
+            ) : (
+              <div className="bg-stone-950/80 border border-stone-700/60 rounded-full px-2.5 py-0.5 text-[9.5px] text-stone-400 flex items-center gap-1.5 backdrop-blur-sm shadow">
+                <span>🐾 Active Pets:</span>
+                <span className="text-emerald-400 font-bold">{equippedPets.filter(Boolean).length}</span>
               </div>
             )}
           </div>

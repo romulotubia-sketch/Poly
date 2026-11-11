@@ -85,6 +85,12 @@ interface GameCanvasProps {
   onTimePhaseChange?: (phase: TimePhase, timeOfDay: number) => void;
   graphicsQuality?: GraphicsQuality;
   onPerfStatsChange?: (stats: PerformanceStatsData) => void;
+  isAutoHunt?: boolean;
+  onToggleAutoHunt?: () => void;
+  onPlayerTargetChange?: (info: { id: string; name: string; hpRatio: number; maxHealth: number; health: number } | null) => void;
+  onPetsEngagedChange?: (count: number) => void;
+  skillCooldowns?: Record<string, number>;
+  onTriggerSkill?: (petId: string) => void;
 }
 
 // Math helpers pre-allocated at module scope to avoid GC inside render loop
@@ -92,6 +98,15 @@ const _vec3A = new THREE.Vector3();
 const _vec3B = new THREE.Vector3();
 const _vec3Cam = new THREE.Vector3();
 const _vec3ScaleNormal = new THREE.Vector3(1, 1, 1);
+
+interface PetCombatAIState {
+  state: 'FOLLOW_PLAYER' | 'SEARCH_ENEMY' | 'APPROACH_TARGET' | 'BASIC_ATTACK' | 'RETURN_TO_PLAYER' | 'IDLE';
+  currentTargetId: string | null;
+  targetEvalTimer: number;
+  attackCooldownTimer: number;
+  attackAnimTimer: number;
+  isAttacking: boolean;
+}
 
 interface ActiveEnemy {
   id: string;
@@ -163,6 +178,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onTimePhaseChange,
   graphicsQuality = 'medium',
   onPerfStatsChange,
+  isAutoHunt = false,
+  onToggleAutoHunt,
+  onPlayerTargetChange,
+  onPetsEngagedChange,
+  skillCooldowns,
+  onTriggerSkill,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const portalRef = useRef<UpgradedPortal | null>(null);
@@ -205,6 +226,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     onTimePhaseChange,
     graphicsQuality,
     onPerfStatsChange,
+    isAutoHunt,
+    onToggleAutoHunt,
+    onPlayerTargetChange,
+    onPetsEngagedChange,
+    skillCooldowns,
+    onTriggerSkill,
   });
 
   useEffect(() => {
@@ -239,6 +266,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       onTimePhaseChange,
       graphicsQuality,
       onPerfStatsChange,
+      isAutoHunt,
+      onToggleAutoHunt,
+      onPlayerTargetChange,
+      onPetsEngagedChange,
+      skillCooldowns,
+      onTriggerSkill,
     };
   }, [
     player,
@@ -271,6 +304,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     onTimePhaseChange,
     graphicsQuality,
     onPerfStatsChange,
+    isAutoHunt,
+    onToggleAutoHunt,
+    onPlayerTargetChange,
+    onPetsEngagedChange,
+    skillCooldowns,
+    onTriggerSkill,
   ]);
 
   useEffect(() => {
@@ -763,6 +802,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let prepCountdownTimer: number | null = 4.0;
     let waveClearedSummary = { wavesCleared: 0, essenceEarned: 0, goldEarned: 0 };
     let instanceActive = false;
+
+    // 3D Animated Target Reticle for Player Auto-Hunt
+    const targetReticleGroup = new THREE.Group();
+    targetReticleGroup.name = 'target_reticle_group';
+    targetReticleGroup.visible = false;
+    const reticleRingMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const reticleRing = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.15, 32), reticleRingMat);
+    reticleRing.rotation.x = -Math.PI / 2;
+    targetReticleGroup.add(reticleRing);
+    for (let i = 0; i < 4; i++) {
+      const notch = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.1), new THREE.MeshBasicMaterial({ color: 0xfef08a, side: THREE.DoubleSide }));
+      notch.rotation.x = -Math.PI / 2;
+      const angle = (i * Math.PI) / 2;
+      notch.position.set(Math.cos(angle) * 1.25, 0.01, Math.sin(angle) * 1.25);
+      notch.rotation.z = -angle;
+      targetReticleGroup.add(notch);
+    }
+    instanceEnvironmentGroup.add(targetReticleGroup);
+
+    // AI state tracking for equipped pets and player auto-hunt
+    const petCombatAIMap = new Map<string, PetCombatAIState>();
+    let playerAutoTargetId: string | null = null;
+    let playerAutoSkillCooldown = 0;
+    let playerTargetCheckTimer = 0;
 
     // Helper: Create 3D Floating Health Bar billboard over enemy
     function createEnemyHealthBar(width = 1.0, yOffset = 1.4): { group: THREE.Group; foreground: THREE.Mesh } {
@@ -2500,19 +2563,82 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      // --- PLAYER MOVEMENT CALCULATIONS (Driven 100% by Mobile Joystick) ---
-      let moveX = 0;
-      let moveZ = 0;
+      // --- PLAYER TARGET DETECTION & AUTO HUNT COMBAT SYSTEM ---
+      const inWildCombat = currentLoc === 'wild_grounds' && instanceActive && prepCountdownTimer === null;
+      let playerTargetEnemy: ActiveEnemy | null = null;
 
-      const joy = stateRef.current.joystickInput;
-      if (joy && (Math.abs(joy.x) > 0.05 || Math.abs(joy.y) > 0.05)) {
-        moveX = joy.x;
-        moveZ = -joy.y;
+      if (inWildCombat) {
+        // Validate or find player's combat target
+        if (playerAutoTargetId) {
+          playerTargetEnemy = activeEnemies.find((e) => e.id === playerAutoTargetId && e.health > 0) || null;
+          if (playerTargetEnemy) {
+            const d = playerTargetEnemy.mesh.position.distanceTo(playerPhysics.pos);
+            if (d > 26) {
+              playerTargetEnemy = null;
+              playerAutoTargetId = null;
+            }
+          } else {
+            playerAutoTargetId = null;
+          }
+        }
+
+        playerTargetCheckTimer -= delta;
+        if (!playerTargetEnemy || playerTargetCheckTimer <= 0) {
+          playerTargetCheckTimer = 0.2;
+          let bestScore = Infinity;
+          let bestEnemy: ActiveEnemy | null = null;
+          for (const enemy of activeEnemies) {
+            if (enemy.health <= 0) continue;
+            const d = enemy.mesh.position.distanceTo(playerPhysics.pos);
+            if (d > 26) continue;
+            // Prefer enemies attacking player or within 4.5m
+            const threatBonus = d < 4.5 ? -3.0 : 0;
+            const score = d + threatBonus;
+            if (score < bestScore) {
+              bestScore = score;
+              bestEnemy = enemy;
+            }
+          }
+          if (bestEnemy) {
+            playerTargetEnemy = bestEnemy;
+            playerAutoTargetId = bestEnemy.id;
+          }
+        }
+
+        // 3D Target Reticle and HUD synchronization
+        if (playerTargetEnemy) {
+          targetReticleGroup.visible = true;
+          targetReticleGroup.position.set(playerTargetEnemy.mesh.position.x, 0.05, playerTargetEnemy.mesh.position.z);
+          targetReticleGroup.rotation.y += delta * 2.4;
+
+          const eName = playerTargetEnemy.type === 'boss'
+            ? 'Shadow Titan'
+            : playerTargetEnemy.type === 'golem'
+            ? 'Grove Golem'
+            : playerTargetEnemy.type === 'wolf'
+            ? 'Shadow Wolf'
+            : playerTargetEnemy.type === 'imp'
+            ? 'Forest Imp'
+            : 'Shadow Slime';
+
+          stateRef.current.onPlayerTargetChange?.({
+            id: playerTargetEnemy.id,
+            name: eName,
+            hpRatio: Math.max(0, playerTargetEnemy.health / playerTargetEnemy.maxHealth),
+            maxHealth: playerTargetEnemy.maxHealth,
+            health: playerTargetEnemy.health,
+          });
+        } else {
+          targetReticleGroup.visible = false;
+          stateRef.current.onPlayerTargetChange?.(null);
+        }
+      } else {
+        targetReticleGroup.visible = false;
+        playerAutoTargetId = null;
+        stateRef.current.onPlayerTargetChange?.(null);
       }
 
-      const inputLen = Math.hypot(moveX, moveZ);
-      const isMoving = inputLen > 0.1;
-
+      // --- MOVEMENT CALCULATIONS ---
       let moveSpeed = 6.2;
       const cornSpeedBonus = (stateRef.current.player.nourishment?.moveSpeedPct || 0) / 100;
       if (cornSpeedBonus > 0) {
@@ -2539,37 +2665,126 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
+      let isMoving = false;
+      let effectiveMoveSpeed = 0;
+      const isAutoHuntActive = stateRef.current.isAutoHunt && inWildCombat;
+
+      if (isAutoHuntActive) {
+        // --- AUTO HUNT CHASE & AUTOMATIC SKILL COMBAT ---
+        // STRICT RULE: The player character NEVER performs basic attacks!
+        if (playerTargetEnemy && !currentSkillCasting) {
+          const distToTarget = playerPhysics.pos.distanceTo(playerTargetEnemy.mesh.position);
+          const skillRange = 3.6; // effective combat skill distance
+
+          if (distToTarget > skillRange) {
+            // Chase towards selected target enemy
+            const chaseDir = _vec3A.subVectors(playerTargetEnemy.mesh.position, playerPhysics.pos);
+            chaseDir.y = 0;
+            chaseDir.normalize();
+
+            playerPhysics.pos.addScaledVector(chaseDir, moveSpeed * delta);
+            applyWorldCollisions(playerPhysics.pos, currentLoc);
+
+            const targetRotY = Math.atan2(chaseDir.x, chaseDir.z);
+            const rotDiff = THREE.MathUtils.euclideanModulo(targetRotY - playerPhysics.rotY + Math.PI, Math.PI * 2) - Math.PI;
+            playerPhysics.rotY += rotDiff * Math.min(delta * 14, 1);
+
+            isMoving = true;
+            effectiveMoveSpeed = moveSpeed;
+          } else {
+            // Within effective skill range: stop movement and face target enemy
+            isMoving = false;
+            effectiveMoveSpeed = 0;
+            const faceDir = _vec3A.subVectors(playerTargetEnemy.mesh.position, playerPhysics.pos);
+            faceDir.y = 0;
+            if (faceDir.lengthSq() > 0.01) {
+              faceDir.normalize();
+              const targetRotY = Math.atan2(faceDir.x, faceDir.z);
+              const rotDiff = THREE.MathUtils.euclideanModulo(targetRotY - playerPhysics.rotY + Math.PI, Math.PI * 2) - Math.PI;
+              playerPhysics.rotY += rotDiff * Math.min(delta * 14, 1);
+            }
+          }
+
+          // Automatic Skill Evaluation and Execution
+          playerAutoSkillCooldown -= delta;
+          if (playerAutoSkillCooldown <= 0 && !currentSkillCasting) {
+            const equippedSlots = stateRef.current.player.equippedSkillSlots.filter(Boolean) as string[];
+            const cds = stateRef.current.skillCooldowns || {};
+            const readySkills = equippedSlots.filter((id) => (cds[id] || 0) <= 0);
+
+            if (readySkills.length > 0) {
+              // Count enemies grouped around player
+              let nearbyEnemies = 0;
+              for (const other of activeEnemies) {
+                if (other.health > 0 && other.mesh.position.distanceTo(playerPhysics.pos) <= 6.5) {
+                  nearbyEnemies++;
+                }
+              }
+
+              // Prefer Area of Effect skills when multiple enemies are grouped
+              const aoeSkills = ['pet_owl', 'pet_bear', 'pet_slime', 'pet_dragon', 'pet_frog'];
+              let chosenSkillId: string | null = null;
+
+              if (nearbyEnemies >= 2) {
+                chosenSkillId = readySkills.find((id) => aoeSkills.includes(id)) || readySkills[0];
+              } else {
+                chosenSkillId = readySkills.find((id) => !aoeSkills.includes(id)) || readySkills[0];
+              }
+
+              if (chosenSkillId) {
+                playerAutoSkillCooldown = 0.35; // buffer between skill activations to prevent conflicts
+                stateRef.current.onTriggerSkill?.(chosenSkillId);
+              }
+            }
+          }
+        }
+      } else {
+        // --- MANUAL MOVEMENT VIA JOYSTICK ---
+        // STRICT RULE: The player character NEVER performs basic attacks!
+        let moveX = 0;
+        let moveZ = 0;
+
+        const joy = stateRef.current.joystickInput;
+        if (joy && (Math.abs(joy.x) > 0.05 || Math.abs(joy.y) > 0.05)) {
+          moveX = joy.x;
+          moveZ = -joy.y;
+        }
+
+        const inputLen = Math.hypot(moveX, moveZ);
+        if (inputLen > 0.1) {
+          isMoving = true;
+          const normX = moveX / inputLen;
+          const normZ = moveZ / inputLen;
+
+          const forward = _vec3A.set(Math.sin(camYaw), 0, Math.cos(camYaw));
+          const right = _vec3B.set(-Math.cos(camYaw), 0, Math.sin(camYaw));
+
+          const worldDir = _vec3Cam
+            .set(0, 0, 0)
+            .addScaledVector(right, normX)
+            .addScaledVector(forward, normZ)
+            .normalize();
+
+          const stepSpeed = moveSpeed * Math.min(inputLen, 1);
+          playerPhysics.pos.addScaledVector(worldDir, stepSpeed * delta);
+          applyWorldCollisions(playerPhysics.pos, currentLoc);
+
+          const targetRotY = Math.atan2(worldDir.x, worldDir.z);
+          const rotDiff = THREE.MathUtils.euclideanModulo(targetRotY - playerPhysics.rotY + Math.PI, Math.PI * 2) - Math.PI;
+          playerPhysics.rotY += rotDiff * Math.min(delta * 14, 1);
+
+          effectiveMoveSpeed = stepSpeed;
+        }
+      }
+
       if (isMoving) {
-        const normX = moveX / inputLen;
-        const normZ = moveZ / inputLen;
-
-        // Camera relative movement
-        const forward = _vec3A.set(Math.sin(camYaw), 0, Math.cos(camYaw));
-        const right = _vec3B.set(-Math.cos(camYaw), 0, Math.sin(camYaw));
-
-        const worldDir = _vec3Cam
-          .set(0, 0, 0)
-          .addScaledVector(right, normX)
-          .addScaledVector(forward, normZ)
-          .normalize();
-
-        playerPhysics.pos.addScaledVector(worldDir, moveSpeed * delta * Math.min(inputLen, 1));
-        applyWorldCollisions(playerPhysics.pos, currentLoc);
-
-        // Smooth rotation towards movement direction
-        const targetRotY = Math.atan2(worldDir.x, worldDir.z);
-        const rotDiff = THREE.MathUtils.euclideanModulo(targetRotY - playerPhysics.rotY + Math.PI, Math.PI * 2) - Math.PI;
-        playerPhysics.rotY += rotDiff * Math.min(delta * 14, 1);
-
-        // Footstep audio during movement
         footstepTimer += delta;
-        const footstepInterval = moveSpeed > 5.5 ? 0.24 : 0.35;
+        const footstepInterval = effectiveMoveSpeed > 5.5 ? 0.24 : 0.35;
         if (footstepTimer > footstepInterval) {
           soundEngine.playFootstep();
           footstepTimer = 0;
         }
 
-        // Check character water ripple & splash interaction on pond and river
         if (stateRef.current.currentLocation === 'farm') {
           envSystem.checkWaterInteraction([{ id: 'player', pos: playerPhysics.pos, isMoving: true }], particleSys);
         }
@@ -2617,15 +2832,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         playerMesh,
         {
           position: playerPhysics.pos,
-          velocity: isMoving ? _vec3Cam.clone().multiplyScalar(moveSpeed * Math.min(inputLen, 1)) : new THREE.Vector3(),
-          horizontalSpeed: isMoving ? moveSpeed * Math.min(inputLen, 1) : 0,
+          velocity: isMoving ? _vec3Cam.clone().multiplyScalar(effectiveMoveSpeed) : new THREE.Vector3(),
+          horizontalSpeed: isMoving ? effectiveMoveSpeed : 0,
           isGrounded: playerPhysics.isGrounded,
           isJumping,
           isFalling,
           isLanding: playerPhysics.isGrounded && playerLandingTimer > 0,
           landingTimer: Math.max(0, playerLandingTimer / 0.18),
-          isAttacking: playerAttackTimer > 0,
-          attackTimer: playerAttackTimer,
+          isAttacking: false, // Character NEVER performs basic attacks
+          attackTimer: 0,
           isCastingSkill: currentSkillCasting !== null,
           skillId: currentSkillCasting?.petId,
           skillPhase: currentSkillCasting?.phase || 'anticipation',
@@ -2728,10 +2943,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       _vec3Cam.set(playerPhysics.pos.x, playerPhysics.pos.y + 1.2, playerPhysics.pos.z);
       camera.lookAt(_vec3Cam);
 
-      // Pet Following, Flocking, Obstacle Avoidance & Personality Animations
+      // Pet Following, Flocking, Independent Combat AI & Personality Animations
       const allPets = stateRef.current.pets;
       const followingPets = allPets.filter((p) => p.isFollowing);
       const followingMeshes = followingPets.map((p) => petMeshMap.get(p.id)).filter(Boolean) as PetMeshGroup[];
+      let activePetsEngaged = 0;
 
       allPets.forEach((pet, overallIdx) => {
         const mesh = petMeshMap.get(pet.id);
@@ -2776,22 +2992,233 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         let petVel = pState.velocity;
         let petSpeed = 0;
         let distToTarget = 0;
+        let petAiState: PetCombatAIState | null = null;
 
         if (pet.isFollowing) {
           mesh.visible = true;
-          const followSlotIdx = followingPets.findIndex((p) => p.id === pet.id);
-          const followResult = petFollowingController.updatePetPosition(
-            mesh,
-            playerPhysics.pos,
-            playerPhysics.rotY,
-            followSlotIdx >= 0 ? followSlotIdx : 0,
-            followingMeshes,
-            currentLoc === 'wild_grounds',
-            delta
-          );
-          petVel = followResult.velocity;
-          petSpeed = followResult.speed;
-          distToTarget = followResult.distToTarget;
+
+          // ========================================================
+          // EQUIPPED PETS - INDEPENDENT COMBAT AI IN WILD GROUNDS
+          // ========================================================
+          // Strict rules:
+          // 1. Independent target selection (not locked to player's target).
+          // 2. Perform BASIC ATTACKS ONLY (no skills, no passives).
+          // 3. Permanent invulnerability (no HP loss, cannot die, enemies never target pets).
+          if (currentLoc === 'wild_grounds' && instanceActive && prepCountdownTimer === null && activeEnemies.length > 0) {
+            let petCombatAi = petCombatAIMap.get(pet.id);
+            if (!petCombatAi) {
+              petCombatAi = {
+                state: 'SEARCH_ENEMY',
+                currentTargetId: null,
+                targetEvalTimer: Math.random() * 0.2,
+                attackCooldownTimer: 0.2 + Math.random() * 0.6,
+                attackAnimTimer: 0,
+                isAttacking: false,
+              };
+              petCombatAIMap.set(pet.id, petCombatAi);
+            }
+            petAiState = petCombatAi;
+
+            // Step 1: Validate or detect independent combat target
+            let petTarget = petCombatAi.currentTargetId
+              ? activeEnemies.find((e) => e.id === petCombatAi!.currentTargetId && e.health > 0) || null
+              : null;
+
+            if (petTarget) {
+              const dPet = mesh.position.distanceTo(petTarget.mesh.position);
+              const dPlayer = playerPhysics.pos.distanceTo(petTarget.mesh.position);
+              if (dPet > 24 || dPlayer > 26) {
+                petTarget = null;
+                petCombatAi.currentTargetId = null;
+              }
+            }
+
+            petCombatAi.targetEvalTimer -= delta;
+            if (!petTarget && petCombatAi.targetEvalTimer <= 0) {
+              petCombatAi.targetEvalTimer = 0.25;
+
+              // Spacing preference: count how many other pets are already targeting each enemy
+              const targetCounts = new Map<string, number>();
+              petCombatAIMap.forEach((otherAi, otherPetId) => {
+                if (otherPetId !== pet.id && otherAi.currentTargetId) {
+                  targetCounts.set(otherAi.currentTargetId, (targetCounts.get(otherAi.currentTargetId) || 0) + 1);
+                }
+              });
+
+              let bestEnemy: ActiveEnemy | null = null;
+              let bestScore = Infinity;
+
+              for (const enemy of activeEnemies) {
+                if (enemy.health <= 0) continue;
+                const dPet = mesh.position.distanceTo(enemy.mesh.position);
+                const dPlayer = playerPhysics.pos.distanceTo(enemy.mesh.position);
+                if (dPet > 22 || dPlayer > 25) continue;
+
+                const petsAlreadyOnTarget = targetCounts.get(enemy.id) || 0;
+                // Disincentivize clumping on the same target when other enemies exist,
+                // while still naturally converging on isolated enemies and bosses!
+                const score = dPet + petsAlreadyOnTarget * 4.5 + (enemy.isBoss ? -3.5 : 0);
+                if (score < bestScore) {
+                  bestScore = score;
+                  bestEnemy = enemy;
+                }
+              }
+
+              if (bestEnemy) {
+                petCombatAi.currentTargetId = bestEnemy.id;
+                petTarget = bestEnemy;
+                petCombatAi.state = 'APPROACH_TARGET';
+              } else {
+                petCombatAi.state = 'RETURN_TO_PLAYER';
+              }
+            }
+
+            // Step 2: Combat Movement and Basic Attack Execution
+            const isRanged = pet.species === 'owl' || pet.species === 'dragon' || pet.species === 'phoenix' || pet.species === 'slime';
+            const attackRange = isRanged ? 3.6 : 1.45;
+
+            if (petTarget) {
+              activePetsEngaged++;
+              const distToEnemy = mesh.position.distanceTo(petTarget.mesh.position);
+
+              if (distToEnemy > attackRange + 0.3) {
+                // APPROACH_TARGET: Smoothly move toward independent target
+                petCombatAi.state = 'APPROACH_TARGET';
+                _vec3A.subVectors(petTarget.mesh.position, mesh.position);
+                _vec3A.y = 0;
+                _vec3A.normalize();
+
+                // Separation force from other pets to avoid clumping
+                for (const otherMesh of followingMeshes) {
+                  if (otherMesh === mesh) continue;
+                  const sepD = mesh.position.distanceTo(otherMesh.position);
+                  if (sepD < 1.15 && sepD > 0.01) {
+                    _vec3B.subVectors(mesh.position, otherMesh.position).normalize();
+                    _vec3A.addScaledVector(_vec3B, 1.1);
+                  }
+                }
+                _vec3A.normalize();
+
+                const approachSpeed = isRanged ? 6.2 : 7.2;
+                mesh.position.addScaledVector(_vec3A, approachSpeed * delta);
+
+                const targetAngle = Math.atan2(_vec3A.x, _vec3A.z);
+                const rotDiff = THREE.MathUtils.euclideanModulo(targetAngle - mesh.rotation.y + Math.PI, Math.PI * 2) - Math.PI;
+                mesh.rotation.y += rotDiff * Math.min(delta * 14, 1);
+
+                petVel.copy(_vec3A).multiplyScalar(approachSpeed);
+                petSpeed = approachSpeed;
+                distToTarget = distToEnemy;
+              } else {
+                // BASIC_ATTACK: Stop and perform basic attack strike
+                petCombatAi.state = 'BASIC_ATTACK';
+                _vec3A.subVectors(petTarget.mesh.position, mesh.position);
+                _vec3A.y = 0;
+                if (_vec3A.lengthSq() > 0.01) {
+                  _vec3A.normalize();
+                  const targetAngle = Math.atan2(_vec3A.x, _vec3A.z);
+                  const rotDiff = THREE.MathUtils.euclideanModulo(targetAngle - mesh.rotation.y + Math.PI, Math.PI * 2) - Math.PI;
+                  mesh.rotation.y += rotDiff * Math.min(delta * 16, 1);
+                }
+
+                petVel.set(0, 0, 0);
+                petSpeed = 0;
+                distToTarget = distToEnemy;
+
+                // Attack timing and damage calculation
+                petCombatAi.attackCooldownTimer -= delta;
+                if (petCombatAi.attackCooldownTimer <= 0) {
+                  const attackInterval = isRanged ? 1.4 : 1.15;
+                  petCombatAi.attackCooldownTimer = attackInterval;
+                  petCombatAi.attackAnimTimer = 0.32;
+                  petCombatAi.isAttacking = true;
+
+                  // Level-based basic attack damage formula
+                  const baseDmg = 28 + (pet.level || 1) * 3.8;
+                  const tomatoBonus = (stateRef.current.player.nourishment?.attackDamagePct || 0) / 100;
+                  let finalDmg = Math.round(baseDmg * (1 + tomatoBonus));
+                  if (petTarget.armorRuptureTimer > 0) finalDmg = Math.round(finalDmg * 1.35);
+
+                  // Apply basic attack damage
+                  petTarget.health -= finalDmg;
+                  petTarget.hitFlashTimer = 0.14;
+                  const hpPct = Math.max(0, petTarget.health / petTarget.maxHealth);
+                  petTarget.healthBarForeground.scale.x = hpPct;
+
+                  // Species-specific visual hit effect, floating damage number, and sound
+                  particleSys.spawnPetBasicAttackHit(petTarget.mesh.position, pet.species);
+                  particleSys.spawnDamageNumber(petTarget.mesh.position, finalDmg, false, petTarget.isBoss, 'pet');
+                  soundEngine.playPetBasicAttack(pet.species);
+
+                  // Enemy defeat check
+                  if (petTarget.health <= 0) {
+                    particleSys.spawnEnemyDefeat(petTarget.mesh.position);
+                    soundEngine.playEnemyDefeat();
+                    enemiesGroup.remove(petTarget.mesh);
+                    const eIdx = activeEnemies.indexOf(petTarget);
+                    if (eIdx >= 0) activeEnemies.splice(eIdx, 1);
+
+                    const waveConfig = INSTANCE_WAVES[currentWaveIndex] || INSTANCE_WAVES[0];
+                    const rewardPiece = Math.max(1, Math.round(waveConfig.essenceReward / waveConfig.enemyCount));
+                    waveClearedSummary.essenceEarned += rewardPiece;
+                    stateRef.current.onUpdatePlayer((prev) => ({
+                      ...prev,
+                      petEssence: (prev.petEssence || 0) + rewardPiece,
+                    }));
+                    stateRef.current.onWaveInfoChange({
+                      wave: currentWaveIndex + 1,
+                      title: waveConfig.title,
+                      enemiesRemaining: activeEnemies.length,
+                      prepCountdown: prepCountdownTimer,
+                    });
+
+                    petCombatAi.currentTargetId = null;
+                    petTarget = null;
+                  }
+                }
+              }
+            } else {
+              // RETURN_TO_PLAYER: Smoothly return to formation behind player
+              petCombatAi.state = 'RETURN_TO_PLAYER';
+              const followSlotIdx = followingPets.findIndex((p) => p.id === pet.id);
+              const followResult = petFollowingController.updatePetPosition(
+                mesh,
+                playerPhysics.pos,
+                playerPhysics.rotY,
+                followSlotIdx >= 0 ? followSlotIdx : 0,
+                followingMeshes,
+                true,
+                delta
+              );
+              petVel = followResult.velocity;
+              petSpeed = followResult.speed;
+              distToTarget = followResult.distToTarget;
+            }
+
+            // Decrement attack animation timer
+            if (petCombatAi.attackAnimTimer > 0) {
+              petCombatAi.attackAnimTimer -= delta;
+              if (petCombatAi.attackAnimTimer <= 0) {
+                petCombatAi.isAttacking = false;
+              }
+            }
+          } else {
+            // Normal formation following outside of active combat or during prep countdown
+            const followSlotIdx = followingPets.findIndex((p) => p.id === pet.id);
+            const followResult = petFollowingController.updatePetPosition(
+              mesh,
+              playerPhysics.pos,
+              playerPhysics.rotY,
+              followSlotIdx >= 0 ? followSlotIdx : 0,
+              followingMeshes,
+              currentLoc === 'wild_grounds',
+              delta
+            );
+            petVel = followResult.velocity;
+            petSpeed = followResult.speed;
+            distToTarget = followResult.distToTarget;
+          }
+
           pState.currentSpeed = petSpeed;
           pState.velocity.copy(petVel);
           pState.distToTarget = distToTarget;
@@ -2880,14 +3307,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 isCastingSkill: pState.isCastingSkill,
                 skillPhase: pState.skillPhase,
                 skillTimer: pState.skillTimer,
-                isTakingDamage: pState.damageTimer > 0,
-                damageTimer: pState.damageTimer,
-                isStunned: pState.stunTimer > 0,
-                stunTimer: pState.stunTimer,
+                isTakingDamage: false, // Pets permanently invulnerable
+                damageTimer: 0,
+                isStunned: false,
+                stunTimer: 0,
                 isVictory: isPlayerVictory,
                 isDefeat: isPlayerDefeat,
                 animTime: mesh.userData.animTime,
                 slotIndex: overallIdx,
+                isBasicAttacking: petAiState?.isAttacking || false,
+                basicAttackTimer: petAiState?.attackAnimTimer || 0,
+                combatState: petAiState?.state || 'FOLLOW_PLAYER',
               },
               delta
             );
@@ -2898,6 +3328,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
       });
+
+      // Report active pets engaged in combat to HUD
+      if (currentLoc === 'wild_grounds') {
+        stateRef.current.onPetsEngagedChange?.(activePetsEngaged);
+      } else {
+        stateRef.current.onPetsEngagedChange?.(0);
+      }
 
       // ==========================================
       // WILD GROUNDS INSTANCE BATTLE LOGIC
