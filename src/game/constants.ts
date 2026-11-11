@@ -1,4 +1,5 @@
 import { PetData, CropDefinition, FarmPlotState, EssenceShopItem, InstanceWaveConfig, PetRarity } from '../types/game';
+import { formatSkillLevelBonus } from './combatSkills';
 
 // Duplicate Conversion Values as specified:
 // Common: 5 Essence, Uncommon: 10 Essence, Rare: 25 Essence, Epic: 60 Essence, Legendary: 150 Essence, Mythical: 350 Essence
@@ -16,7 +17,7 @@ export const INITIAL_PETS: PetData[] = [
     id: 'pet_fox',
     species: 'fox',
     name: 'Ember',
-    description: 'A nimble, fiery fox with a warm spirit. Loves running through tall grass and helping crops flourish.',
+    description: 'A nimble, fiery fox with a warm spirit. Master of blazing momentum and searing damage.',
     rarity: 'Rare',
     level: 1,
     exp: 0,
@@ -31,28 +32,28 @@ export const INITIAL_PETS: PetData[] = [
       id: 'skill_flame_dash',
       name: 'Flame Dash',
       type: 'active',
-      description: 'Dashes forward leaving a radiant flame trail that boosts move speed by +75% for 3s, hits enemies for 85 damage, and accelerates crop growth.',
+      description: 'Dash forward, damaging enemies along the path and leaving a burning trail.',
       icon: 'Flame',
       baseCooldown: 8,
       cooldown: 8,
-      effectValue: 75,
+      effectValue: 90,
     },
     passiveSkill: {
       id: 'passive_burning_spirit',
       name: 'Burning Spirit',
       type: 'passive',
-      description: 'Increases player base move speed by +15% and increases overall farm growth rate by +10%.',
+      description: 'Enemies hit by the Fox\'s abilities receive additional burn damage over time.',
       icon: 'Sun',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 15,
+      effectValue: 20,
     },
   },
   {
     id: 'pet_turtle',
     species: 'turtle',
     name: 'Shelly',
-    description: 'A serene ancient turtle with a moss-carpeted shell. Commands gentle mountain waters.',
+    description: 'A serene ancient turtle with a moss-carpeted shell. Unyielding guardian of protective currents.',
     rarity: 'Common',
     level: 1,
     exp: 0,
@@ -64,31 +65,32 @@ export const INITIAL_PETS: PetData[] = [
     accentColor: '#8ab17d',
     unlocked: true,
     activeSkill: {
-      id: 'skill_water_shield',
-      name: 'Water Shield',
+      id: 'skill_tidal_barrier',
+      name: 'Tidal Barrier',
       type: 'active',
-      description: 'Creates a protective swirling hydro sphere that waters all crops within 5m, shields player for 50 damage, and splashes nearby foes.',
+      description: 'Summon a rotating water shield that absorbs incoming damage and pushes nearby enemies away.',
       icon: 'Droplets',
       baseCooldown: 12,
       cooldown: 12,
-      effectValue: 5,
+      effectValue: 70,
     },
     passiveSkill: {
-      id: 'passive_natural_protection',
-      name: 'Natural Protection',
+      id: 'passive_ocean_armor',
+      name: 'Ocean Armor',
       type: 'passive',
-      description: 'Crops retain hydration 50% longer. Gives +20% defense and stamina regeneration.',
+      description: 'Reduces incoming damage. Damage reduction increases when the player\'s health is low.',
       icon: 'ShieldCheck',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 50,
+      effectValue: 15,
     },
   },
   {
     id: 'pet_rabbit',
     species: 'rabbit',
     name: 'Hoppy',
-    description: 'An energetic cotton-tailed hare who is an expert at finding the sweetest harvest carrots.',
+    role: 'Mobility / Critical Damage' as any,
+    description: 'An energetic cotton-tailed hare with razor reflexes and devastating aerial strikes.',
     rarity: 'Common',
     level: 1,
     exp: 0,
@@ -100,31 +102,31 @@ export const INITIAL_PETS: PetData[] = [
     accentColor: '#f7ede2',
     unlocked: true,
     activeSkill: {
-      id: 'skill_swift_leap',
-      name: 'Swift Leap',
+      id: 'skill_phantom_leap',
+      name: 'Phantom Leap',
       type: 'active',
-      description: 'Performs a giant acrobatic leap forward. Harvests mature crops in radius and stomps enemies for 70 damage upon landing.',
+      description: 'Leap toward a targeted location, dealing area damage upon landing.',
       icon: 'Rabbit',
       baseCooldown: 6,
       cooldown: 6,
-      effectValue: 4,
+      effectValue: 80,
     },
     passiveSkill: {
-      id: 'passive_quick_harvest',
-      name: 'Quick Harvest',
+      id: 'passive_predator_instinct',
+      name: 'Predator Instinct',
       type: 'passive',
-      description: 'Provides a +35% chance to harvest bonus double crops and seeds.',
+      description: 'Increases critical hit chance against enemies with low health.',
       icon: 'Sparkles',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 35,
+      effectValue: 20,
     },
   },
   {
     id: 'pet_owl',
     species: 'owl',
     name: 'Barnaby',
-    description: 'A wise nocturnal owl with luminous eyes that reveal the secrets of the forest and rare seeds.',
+    description: 'A wise nocturnal owl with luminous eyes that commands atmospheric gales and vortexes.',
     rarity: 'Epic',
     level: 1,
     exp: 0,
@@ -136,31 +138,31 @@ export const INITIAL_PETS: PetData[] = [
     accentColor: '#9d4edd',
     unlocked: true,
     activeSkill: {
-      id: 'skill_wind_gust',
-      name: 'Wind Gust',
+      id: 'skill_cyclone',
+      name: 'Cyclone',
       type: 'active',
-      description: 'Unleashes a sweeping floral gale forward that knocks back enemies, pollinates crops (instant +25% growth) and uncovers hidden wild seeds.',
+      description: 'Create a tornado that pulls enemies together and repeatedly damages them.',
       icon: 'Wind',
       baseCooldown: 10,
       cooldown: 10,
-      effectValue: 25,
+      effectValue: 98,
     },
     passiveSkill: {
-      id: 'passive_keen_sight',
-      name: 'Keen Sight',
+      id: 'passive_aerial_hunter',
+      name: 'Aerial Hunter',
       type: 'passive',
-      description: 'Increases rare and exotic seed drop chance by +30%. Highlights harvestable crops with a subtle golden beacon.',
+      description: 'Increases damage against airborne, slowed, or grouped enemies.',
       icon: 'Eye',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 30,
+      effectValue: 20,
     },
   },
   {
     id: 'pet_bear',
     species: 'bear',
     name: 'Grizz',
-    description: 'A gentle giant of a bear who loves berries and honey. His strength can reshape the earth.',
+    description: 'A colossal mountain bear whose seismic might shatters the ground and absorbs incoming shocks.',
     rarity: 'Epic',
     level: 1,
     exp: 0,
@@ -172,31 +174,31 @@ export const INITIAL_PETS: PetData[] = [
     accentColor: '#a68a64',
     unlocked: true,
     activeSkill: {
-      id: 'skill_ground_slam',
-      name: 'Ground Slam',
+      id: 'skill_earthshatter',
+      name: 'Earthshatter',
       type: 'active',
-      description: 'Slams the ground creating a seismic shockwave that deals 110 damage to surrounding foes, tills untilled soil, and breaks nearby rocks.',
+      description: 'Slam the ground, creating a shockwave that damages and briefly stuns nearby enemies.',
       icon: 'Hammer',
       baseCooldown: 14,
       cooldown: 14,
-      effectValue: 6,
+      effectValue: 120,
     },
     passiveSkill: {
-      id: 'passive_heavy_strength',
-      name: 'Heavy Strength',
+      id: 'passive_unyielding',
+      name: 'Unyielding',
       type: 'passive',
-      description: 'Expands player inventory capacity by +50% and doubles stone & timber gathered from rocks and stumps.',
+      description: 'Taking damage builds resistance, temporarily reducing subsequent incoming damage.',
       icon: 'Dumbbell',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 50,
+      effectValue: 7,
     },
   },
   {
     id: 'pet_slime',
     species: 'slime',
     name: 'Boba',
-    description: 'A bouncy, cheerful slime made of sweetened dewdrop nectar. Spreads joy and soothing revitalizing moisture.',
+    description: 'A bouncy, cheerful slime made of sweetened dewdrop nectar with miraculous restorative powers.',
     rarity: 'Legendary',
     level: 1,
     exp: 0,
@@ -208,24 +210,24 @@ export const INITIAL_PETS: PetData[] = [
     accentColor: '#70e000',
     unlocked: true,
     activeSkill: {
-      id: 'skill_healing_bubble',
-      name: 'Healing Bubble',
+      id: 'skill_arcane_burst',
+      name: 'Arcane Burst',
       type: 'active',
-      description: 'Emanates a joyful restorative bubble ring that restores +45 Player HP, fully replenishes pet hunger/happiness, and hydrates nearby soil.',
+      description: 'Release an expanding magical explosion that damages enemies and restores a portion of the player\'s health.',
       icon: 'HeartHandshake',
       baseCooldown: 15,
       cooldown: 15,
-      effectValue: 100,
+      effectValue: 70,
     },
     passiveSkill: {
-      id: 'passive_regeneration',
-      name: 'Regeneration',
+      id: 'passive_gelatinous_body',
+      name: 'Gelatinous Body',
       type: 'passive',
-      description: 'All pets continuously regenerate happiness and hunger over time. Player energy and HP regenerates slowly.',
+      description: 'Periodically restores a small amount of player health after avoiding damage for a short period.',
       icon: 'HeartPulse',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 100,
+      effectValue: 4,
     },
   },
   // Additional collectible pets for reward pool and duplicate conversions
@@ -233,7 +235,7 @@ export const INITIAL_PETS: PetData[] = [
     id: 'pet_frog',
     species: 'frog',
     name: 'Puddles',
-    description: 'A cheerful pond frog who loves rain showers and leaps across puddles with boundless enthusiasm.',
+    description: 'A cheerful pond frog who leaps across puddles and unleashes tidal splash bursts.',
     rarity: 'Uncommon',
     level: 1,
     exp: 0,
@@ -248,21 +250,21 @@ export const INITIAL_PETS: PetData[] = [
       id: 'skill_splash_hop',
       name: 'Splash Hop',
       type: 'active',
-      description: 'Hops into the air creating a tidal splash that drenches crops and deals 65 damage to enemies.',
+      description: 'Hops into the air creating a tidal splash that deals 75 damage to enemies and slows them.',
       icon: 'Droplets',
       baseCooldown: 8,
       cooldown: 8,
-      effectValue: 65,
+      effectValue: 75,
     },
     passiveSkill: {
       id: 'passive_swamp_blessing',
       name: 'Swamp Blessing',
       type: 'passive',
-      description: 'Increases water retention on all plots by 30% and gives +15% movement speed on moist soil.',
-      icon: 'Sparkles',
+      description: 'Drenches nearby enemies upon taking damage, reducing their attack damage and speed.',
+      icon: 'ShieldCheck',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 30,
+      effectValue: 12,
     },
   },
   {
@@ -284,28 +286,28 @@ export const INITIAL_PETS: PetData[] = [
       id: 'skill_lunar_howl',
       name: 'Lunar Howl',
       type: 'active',
-      description: 'Releases a reverberating howl that intimidates enemies for 80 damage and grants +30% attack boost for 5s.',
+      description: 'Releases a reverberating howl that strikes enemies for 85 damage and grants +25% attack boost.',
       icon: 'Flame',
       baseCooldown: 11,
       cooldown: 11,
-      effectValue: 80,
+      effectValue: 85,
     },
     passiveSkill: {
       id: 'passive_pack_instinct',
       name: 'Pack Instinct',
       type: 'passive',
-      description: 'All pets level up +20% faster and gain +15% happiness from farm exploration.',
+      description: 'Increases all pet skill damage and movement speed when enemies are nearby.',
       icon: 'Eye',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 20,
+      effectValue: 15,
     },
   },
   {
     id: 'pet_deer',
     species: 'deer',
     name: 'Fawn',
-    description: 'A gentle forest spirit whose blossoming antlers radiate forest harmony and bountiful blooms.',
+    description: 'A gentle forest spirit whose blossoming antlers radiate forest harmony and rejuvenation.',
     rarity: 'Uncommon',
     level: 1,
     exp: 0,
@@ -320,21 +322,21 @@ export const INITIAL_PETS: PetData[] = [
       id: 'skill_nature_sprint',
       name: 'Nature Sprint',
       type: 'active',
-      description: 'Gallops forward surrounded by golden leaves, boosting move speed by +50% and healing 30 HP.',
+      description: 'Gallops forward with celestial grace, dealing 70 damage, healing 35 HP, and boosting speed.',
       icon: 'Sun',
       baseCooldown: 9,
       cooldown: 9,
-      effectValue: 50,
+      effectValue: 70,
     },
     passiveSkill: {
       id: 'passive_herbalist',
-      name: 'Herbalist',
+      name: 'Herbalist Vitality',
       type: 'passive',
-      description: 'Increases harvest coin yields by +15% and speeds up crop maturity by +10%.',
+      description: 'Increases healing effectiveness by +20% and converts overhealing into a bark shield.',
       icon: 'Sparkles',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 15,
+      effectValue: 20,
     },
   },
   {
@@ -356,21 +358,21 @@ export const INITIAL_PETS: PetData[] = [
       id: 'skill_inferno_nova',
       name: 'Inferno Nova',
       type: 'active',
-      description: 'Summons a blazing orbital supernova that annihilates all enemies in an 8m radius for 180 damage and instantly matures surrounding crops!',
+      description: 'Summons a blazing orbital supernova that annihilates all enemies in an 8.5m radius for 200 damage.',
       icon: 'Flame',
       baseCooldown: 18,
       cooldown: 18,
-      effectValue: 180,
+      effectValue: 200,
     },
     passiveSkill: {
       id: 'passive_dragon_might',
       name: 'Dragon Might',
       type: 'passive',
-      description: 'Player damage increased by +50%, farm harvest sell values boosted by +40%, and passive Pet Essence generation.',
+      description: 'Player damage increased by +25% and continuously burns enemies within close range.',
       icon: 'Dumbbell',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 50,
+      effectValue: 25,
     },
   },
   {
@@ -392,62 +394,36 @@ export const INITIAL_PETS: PetData[] = [
       id: 'skill_solar_flare',
       name: 'Solar Flare',
       type: 'active',
-      description: 'Bathes the field in celestial dawn light, dealing 160 holy damage to all foes and fully reviving player HP to 100%!',
+      description: 'Bathes the field in celestial dawn light, dealing 180 holy damage to all foes and restoring HP!',
       icon: 'Sun',
       baseCooldown: 20,
       cooldown: 20,
-      effectValue: 160,
+      effectValue: 180,
     },
     passiveSkill: {
       id: 'passive_eternal_dawn',
       name: 'Eternal Dawn',
       type: 'passive',
-      description: 'Prevents fatal damage once per instance run, restoring 50% HP, and doubles crop growth rate under sunlight.',
+      description: 'Prevents fatal damage once per instance run, immediately reviving the player with restored health.',
       icon: 'ShieldCheck',
       baseCooldown: 0,
       cooldown: 0,
-      effectValue: 100,
+      effectValue: 50,
     },
   },
 ];
 
 export function getSkillLevelBonus(skillId: string, level: number): string {
-  switch (skillId) {
-    case 'skill_flame_dash':
-      return `Dash speed: +${75 + level * 5}%, Cooldown: ${(8 * Math.max(0.6, 1 - level * 0.03)).toFixed(1)}s, Damage: ${85 + level * 10}`;
-    case 'passive_burning_spirit':
-      return `Move speed: +${15 + level * 2}%, Farm growth rate: +${10 + level * 3}%`;
-    case 'skill_water_shield':
-      return `Watering radius: ${(5 + level * 0.5).toFixed(1)}m, Cooldown: ${(12 * Math.max(0.6, 1 - level * 0.03)).toFixed(1)}s, Shield: ${50 + level * 8}`;
-    case 'passive_natural_protection':
-      return `Moisture retention: +${50 + level * 5}%, Stamina regen: +${level * 4}%`;
-    case 'skill_swift_leap':
-      return `Harvest leap radius: ${(4 + level * 0.4).toFixed(1)}m, Jump distance: +${level * 8}%, Damage: ${70 + level * 8}`;
-    case 'passive_quick_harvest':
-      return `Bonus harvest chance: +${35 + level * 3}%, Gathering speed: +${20 + level * 2}%`;
-    case 'skill_wind_gust':
-      return `Growth boost: +${25 + level * 4}%, Gust distance: ${(8 + level * 0.8).toFixed(1)}m, Damage: ${55 + level * 7}`;
-    case 'passive_keen_sight':
-      return `Rare seed chance: +${30 + level * 5}%, Discovery range: +${level * 2}m`;
-    case 'skill_ground_slam':
-      return `Shockwave radius: ${(6 + level * 0.6).toFixed(1)}m, Mineral yield: +${level * 10}%, Damage: ${110 + level * 15}`;
-    case 'passive_heavy_strength':
-      return `Inventory cap: +${50 + level * 10}%, Gathering yield: +${100 + level * 15}%`;
-    case 'skill_healing_bubble':
-      return `Player Heal: ${45 + level * 5} HP, Pet Happiness: +${30 + level * 5}%, Cooldown: ${(15 * Math.max(0.5, 1 - level * 0.03)).toFixed(1)}s`;
-    case 'passive_regeneration':
-      return `Auto-regen speed: +${100 + level * 10}%, Energy recovery: +${level * 5}%`;
-    case 'skill_splash_hop':
-      return `Splash Damage: ${65 + level * 8}, Drench Radius: ${(4 + level * 0.5).toFixed(1)}m`;
-    case 'skill_lunar_howl':
-      return `Howl Damage: ${80 + level * 10}, Attack Boost: +${30 + level * 3}%`;
-    case 'skill_inferno_nova':
-      return `Nova Damage: ${180 + level * 25}, Radius: ${(8 + level * 0.8).toFixed(1)}m`;
-    case 'skill_solar_flare':
-      return `Flare Damage: ${160 + level * 20}, Revives 100% HP`;
-    default:
-      return `Level ${level} mastery active (+${level * 5}% power)`;
+  // Map skill id to pet and skill type
+  for (const pet of INITIAL_PETS) {
+    if (pet.activeSkill.id === skillId) {
+      return formatSkillLevelBonus(pet.id, 'active', level);
+    }
+    if (pet.passiveSkill.id === skillId) {
+      return formatSkillLevelBonus(pet.id, 'passive', level);
+    }
   }
+  return `Level ${level} combat effectiveness (+${level * 5}% power)`;
 }
 
 // Initial Seeds and Crops configured exactly as specified:

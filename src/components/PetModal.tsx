@@ -11,10 +11,12 @@ import {
   CheckCircle2,
   Award,
   ChevronRight,
+  Lock,
 } from 'lucide-react';
 import { PetData, PlayerStats } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 import { getSkillLevelBonus } from '../game/constants';
+import { PET_COMBAT_CONFIGS } from '../game/combatSkills';
 
 interface PetModalProps {
   pets: PetData[];
@@ -316,6 +318,50 @@ export const PetModal: React.FC<PetModalProps> = ({
               </div>
             </div>
 
+            {/* Quick Skill Slot Assignment & Synergy Status */}
+            <div className="bg-stone-950/80 rounded-2xl p-3 border border-amber-500/30">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-amber-200">
+                  ⚔️ Equip Skill to Bar (1–5)
+                </span>
+                {isEquipped ? (
+                  <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                    Active in Slot {equippedSlotNum + 1} (Passive Active)
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-stone-400">
+                    Passive activates when equipped
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {[0, 1, 2, 3, 4].map((slotIdx) => {
+                  const petInSlotId = player.equippedSkillSlots[slotIdx];
+                  const isThisPet = petInSlotId === selectedPet.id;
+                  const occupiedPet = pets.find((p) => p.id === petInSlotId);
+
+                  return (
+                    <button
+                      key={slotIdx}
+                      onClick={() => handleEquipSlot(slotIdx, selectedPet.id)}
+                      className={`py-1.5 px-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer flex flex-col items-center justify-center ${
+                        isThisPet
+                          ? 'bg-amber-500 text-stone-950 border-amber-300 shadow-md ring-2 ring-amber-400/50'
+                          : occupiedPet
+                          ? 'bg-stone-800/80 hover:bg-stone-700 text-stone-300 border-stone-700'
+                          : 'bg-stone-900/60 hover:bg-stone-800 text-stone-400 border-dashed border-stone-700'
+                      }`}
+                    >
+                      <span>Slot {slotIdx + 1}</span>
+                      <span className="text-[9px] opacity-80 truncate max-w-full">
+                        {isThisPet ? 'Equipped' : occupiedPet ? occupiedPet.name : 'Empty'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Skills Breakdown */}
             <div className="space-y-3">
               {/* Active Skill */}
@@ -345,7 +391,15 @@ export const PetModal: React.FC<PetModalProps> = ({
                     <Shield className="w-4 h-4 text-emerald-400" />
                     <span>PASSIVE SKILL: {selectedPet.passiveSkill.name}</span>
                   </div>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full">Always On</span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                      isEquipped
+                        ? 'text-emerald-300 bg-emerald-950 border border-emerald-500/40'
+                        : 'text-stone-400 bg-stone-800'
+                    }`}
+                  >
+                    {isEquipped ? 'Active (Equipped)' : 'Inactive (Requires Equip)'}
+                  </span>
                 </div>
                 <p className="text-xs text-stone-300 leading-relaxed mb-2">{selectedPet.passiveSkill.description}</p>
                 <div className="text-[11px] text-emerald-200/90 bg-emerald-950/40 border border-emerald-500/30 rounded-xl px-2.5 py-1">
@@ -355,6 +409,68 @@ export const PetModal: React.FC<PetModalProps> = ({
                     : getSkillLevelBonus(selectedPet.passiveSkill.id, selectedPet.level)}
                 </div>
               </div>
+
+              {/* Level-Based Skill Milestones Matrix (Lv 1, 10, 20, 30, 40, 50) */}
+              {PET_COMBAT_CONFIGS[selectedPet.id] && (
+                <div className="bg-stone-950/70 rounded-2xl p-3.5 border border-stone-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-amber-400" />
+                      Milestone Progression (Levels 1–50)
+                    </span>
+                    <span className="text-[10px] text-stone-400">
+                      Unlocks unique combat perks
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {PET_COMBAT_CONFIGS[selectedPet.id].active.milestones.map((m) => {
+                      const isReached = selectedPet.level >= m.level;
+                      const passiveM = PET_COMBAT_CONFIGS[selectedPet.id].passive.milestones.find(
+                        (pm) => pm.level === m.level
+                      );
+
+                      return (
+                        <div
+                          key={m.level}
+                          className={`p-2 rounded-xl border text-[10px] flex flex-col justify-between ${
+                            isReached
+                              ? 'bg-amber-950/30 border-amber-500/40 text-stone-200'
+                              : 'bg-stone-900/40 border-stone-800 text-stone-500'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span
+                              className={`font-bold px-1.5 py-0.2 rounded-full text-[9px] ${
+                                isReached
+                                  ? 'bg-amber-500 text-stone-950'
+                                  : 'bg-stone-800 text-stone-400'
+                              }`}
+                            >
+                              Lv.{m.level}
+                            </span>
+                            {isReached ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Lock className="w-3 h-3 text-stone-600" />
+                            )}
+                          </div>
+                          <div className="font-semibold text-amber-200/90 truncate mb-0.5">
+                            {m.title}
+                          </div>
+                          <div className="text-[9px] line-clamp-2 text-stone-300">
+                            {m.effect}
+                          </div>
+                          {passiveM && (
+                            <div className="text-[8.5px] mt-1 pt-1 border-t border-stone-800/80 text-emerald-400/90 line-clamp-1">
+                              🛡️ {passiveM.title}: {passiveM.effect}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Pet Action Buttons */}

@@ -27,6 +27,7 @@ import {
 import { ParticleSystem } from './particleSystem';
 import { soundEngine } from '../audio/soundEngine';
 import { INSTANCE_WAVES } from './constants';
+import { computeActiveSkillStats } from './combatSkills';
 
 interface JoystickVector {
   x: number;
@@ -62,6 +63,7 @@ interface GameCanvasProps {
 const _vec3A = new THREE.Vector3();
 const _vec3B = new THREE.Vector3();
 const _vec3Cam = new THREE.Vector3();
+const _vec3ScaleNormal = new THREE.Vector3(1, 1, 1);
 
 interface ActiveEnemy {
   id: string;
@@ -75,6 +77,31 @@ interface ActiveEnemy {
   attackTimer: number;
   isBoss: boolean;
   healthBarForeground: THREE.Mesh;
+  // Combat status effects
+  burnTimer: number;
+  burnDmgPerTick: number;
+  burnTickTimer: number;
+  burnSourceLevel: number;
+  stunTimer: number;
+  slowTimer: number;
+  slowFactor: number;
+  isAirborne: boolean;
+  airborneTimer: number;
+  armorRuptureTimer: number;
+  hitFlashTimer?: number;
+}
+
+interface ActiveCyclone {
+  mesh: THREE.Group;
+  pos: THREE.Vector3;
+  duration: number;
+  maxDuration: number;
+  radius: number;
+  tickTimer: number;
+  tickDamage: number;
+  level: number;
+  hasRazorFeathers: boolean;
+  hasCenterStun: boolean;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -636,6 +663,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           attackTimer: 0,
           isBoss,
           healthBarForeground: fg,
+          burnTimer: 0,
+          burnDmgPerTick: 0,
+          burnTickTimer: 0,
+          burnSourceLevel: 1,
+          stunTimer: 0,
+          slowTimer: 0,
+          slowFactor: 1,
+          isAirborne: false,
+          airborneTimer: 0,
+          armorRuptureTimer: 0,
         });
       }
 
@@ -654,6 +691,77 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     playerMesh.position.set(0, 0, 0);
     scene.add(playerMesh);
 
+    // 3D Multi-Layer Tidal Barrier Hydro Shield Mesh
+    const waterShieldMesh = new THREE.Group();
+    waterShieldMesh.position.set(0, 0.8, 0);
+    waterShieldMesh.visible = false;
+
+    // 1. Outer flowing translucent water sphere (low-poly icosahedron)
+    const outerShieldMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.1,
+      metalness: 0.2,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    });
+    const outerShield = new THREE.Mesh(new THREE.IcosahedronGeometry(1.35, 2), outerShieldMat);
+    waterShieldMesh.add(outerShield);
+
+    // 2. Inner faceted water energy core
+    const innerShieldMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.4,
+    });
+    const innerShield = new THREE.Mesh(new THREE.IcosahedronGeometry(1.15, 1), innerShieldMat);
+    waterShieldMesh.add(innerShield);
+
+    // 3. Tilted concentric water rings
+    const ringMat1 = new THREE.MeshStandardMaterial({
+      color: 0x7dd3fc,
+      roughness: 0.1,
+      metalness: 0.3,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const ring1 = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.05, 8, 24), ringMat1);
+    ring1.rotation.x = Math.PI / 2;
+    waterShieldMesh.add(ring1);
+
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.42, 0.04, 8, 24), ringMat1);
+    ring2.rotation.x = Math.PI / 3;
+    ring2.rotation.y = Math.PI / 4;
+    waterShieldMesh.add(ring2);
+
+    // 4. Six orbiting water droplets
+    const orbGroup = new THREE.Group();
+    const orbMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      roughness: 0.1,
+      metalness: 0.4,
+      transparent: true,
+      opacity: 0.9,
+    });
+    for (let i = 0; i < 6; i++) {
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), orbMat);
+      const ang = (i * Math.PI * 2) / 6;
+      orb.position.set(Math.cos(ang) * 1.45, Math.sin(ang * 2) * 0.25, Math.sin(ang) * 1.45);
+      orbGroup.add(orb);
+    }
+    waterShieldMesh.add(orbGroup);
+    playerMesh.add(waterShieldMesh);
+
+    waterShieldMesh.userData = {
+      outerShield,
+      innerShield,
+      ring1,
+      ring2,
+      orbGroup,
+      hitFlashTimer: 0,
+    };
+
     const playerPhysics = {
       pos: new THREE.Vector3(0, 0, 0),
       rotY: 0,
@@ -662,7 +770,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       walkCycle: 0,
       speedBoostTimer: 0,
       dashDir: new THREE.Vector3(0, 0, 0),
+      dashTimer: 0,
+      dashSpeed: 0,
+      squashTimer: 0,
       shield: 0,
+      maxShield: 100,
       invulnTimer: 0,
     };
 
@@ -670,6 +782,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let camYaw = Math.PI;
     let camPitch = 0.32;
     const camDist = 9.5;
+
+    // Active 3D Cyclone instances in the world
+    const activeCyclones: ActiveCyclone[] = [];
+
+    // Bear Fortitude stacks (Unyielding passive)
+    let fortitudeStacks = 0;
+    let fortitudeTimer = 0;
+
+    // Slime Gelatinous Body out-of-combat heal timers
+    let outOfCombatDamageTimer = 5.0;
+    let slimeRegenTicker = 0;
+
+    // Instance cheat-death mechanics
+    let bearCheatDeathUsed = false;
+    let slimeCheatDeathUsed = false;
 
     // Follower Pet Meshes
     const petMeshMap = new Map<string, PetMeshGroup>();
@@ -680,14 +807,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       petMeshMap.set(pet.id, petMesh);
     });
 
-    // Touch controls listeners for mobile camera drag
+    // Touch & Mouse controls listeners for camera drag
     let touchStartX = 0;
     let touchStartY = 0;
     let isDraggingCam = false;
 
     const dom = renderer.domElement;
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1 && e.touches[0].clientX > window.innerWidth * 0.45) {
+      if (e.touches.length === 1 && e.touches[0].clientX > window.innerWidth * 0.35) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
         isDraggingCam = true;
@@ -698,7 +825,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const dx = e.touches[0].clientX - touchStartX;
       const dy = e.touches[0].clientY - touchStartY;
       camYaw -= dx * 0.006;
-      camPitch = Math.max(0.12, Math.min(0.85, camPitch - dy * 0.005));
+      // Inverted up and down dragging fixed so dragging up pitches down toward horizon, dragging down pitches up toward bird's-eye
+      camPitch = Math.max(0.12, Math.min(0.85, camPitch + dy * 0.005));
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
     };
@@ -706,10 +834,37 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       isDraggingCam = false;
     };
 
+    // Desktop Mouse Dragging
+    let isMouseDragging = false;
+    let mouseStartX = 0;
+    let mouseStartY = 0;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) {
+        isMouseDragging = true;
+        mouseStartX = e.clientX;
+        mouseStartY = e.clientY;
+      }
+    };
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isMouseDragging) return;
+      const dx = e.clientX - mouseStartX;
+      const dy = e.clientY - mouseStartY;
+      camYaw -= dx * 0.006;
+      camPitch = Math.max(0.12, Math.min(0.85, camPitch + dy * 0.005));
+      mouseStartX = e.clientX;
+      mouseStartY = e.clientY;
+    };
+    const handleMouseUp = () => {
+      isMouseDragging = false;
+    };
+
     dom.addEventListener('touchstart', handleTouchStart, { passive: true });
     dom.addEventListener('touchmove', handleTouchMove, { passive: true });
     dom.addEventListener('touchend', handleTouchEnd, { passive: true });
     dom.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    dom.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
 
     const handleResize = () => {
       if (!container) return;
@@ -751,27 +906,177 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const pet = stateRef.current.pets.find((p) => p.id === petId);
       const level = pet?.level || 1;
 
-      // Combat damage helper: applies damage to all enemies within radius
-      const dealDamageInRadius = (center: THREE.Vector3, radius: number, dmg: number) => {
+      // Combat damage helper: applies damage and checks active equipped passives
+      const dealDamageInRadius = (
+        center: THREE.Vector3,
+        radius: number,
+        baseDmg: number,
+        options?: {
+          isFoxSkill?: boolean;
+          isRabbitSkill?: boolean;
+          isOwlSkill?: boolean;
+          isBearSkill?: boolean;
+          isSlimeSkill?: boolean;
+          knockback?: number;
+          stunDuration?: number;
+          airborne?: boolean;
+          slowPct?: number;
+          slowDuration?: number;
+          armorRupture?: boolean;
+        }
+      ) => {
         if (!inWild) return;
+        const equipped = stateRef.current.player.equippedSkillSlots;
+        const foxPet = stateRef.current.pets.find((p) => p.id === 'pet_fox');
+        const rabbitPet = stateRef.current.pets.find((p) => p.id === 'pet_rabbit');
+        const owlPet = stateRef.current.pets.find((p) => p.id === 'pet_owl');
+        const bearPet = stateRef.current.pets.find((p) => p.id === 'pet_bear');
+
+        const hasBurningSpirit = equipped.includes('pet_fox');
+        const hasPredatorInstinct = equipped.includes('pet_rabbit');
+        const hasAerialHunter = equipped.includes('pet_owl');
+        const hasWolfMight = equipped.includes('pet_wolf');
+        const hasDragonMight = equipped.includes('pet_dragon');
+
+        let enemiesHitCount = 0;
+
         for (let i = activeEnemies.length - 1; i >= 0; i--) {
           const enemy = activeEnemies[i];
           const dist = enemy.mesh.position.distanceTo(center);
           if (dist <= radius) {
-            enemy.health -= dmg;
-            particleSys.spawnCombatHit(enemy.mesh.position, 0xff0054);
-            soundEngine.playCombatHit();
+            enemiesHitCount++;
+            let finalDmg = baseDmg;
+
+            // Wolf Pack Instinct & Dragon Might damage multiplier
+            if (hasWolfMight) finalDmg *= 1.25;
+            if (hasDragonMight) finalDmg *= 1.35;
+
+            // Armor rupture from Bear Earthshatter Lv 40+
+            if (enemy.armorRuptureTimer > 0) {
+              finalDmg *= 1.35;
+            }
+
+            // Burning Spirit Lv 40 Conflagration: burning enemies take +25% from all skills
+            if (enemy.burnTimer > 0 && hasBurningSpirit && (foxPet?.level || 1) >= 40) {
+              finalDmg *= 1.25;
+            }
+
+            // Owl Aerial Hunter: +20% to +50% damage against airborne, stunned, slowed, or grouped enemies
+            if (hasAerialHunter) {
+              const isCCed = enemy.isAirborne || enemy.stunTimer > 0 || enemy.slowTimer > 0;
+              let isGrouped = false;
+              for (const other of activeEnemies) {
+                if (other !== enemy && other.mesh.position.distanceTo(enemy.mesh.position) <= 3.5) {
+                  isGrouped = true;
+                  break;
+                }
+              }
+              if (isCCed || isGrouped) {
+                const owlLvl = owlPet?.level || 1;
+                const owlBonus = owlLvl >= 50 ? 0.50 : owlLvl >= 10 ? 0.30 : 0.20;
+                finalDmg *= (1 + owlBonus);
+              }
+            }
+
+            // Rabbit Predator Instinct: Critical Hit chance against enemies with low health (< 50% HP)
+            let isCrit = false;
+            if (hasPredatorInstinct) {
+              const rabLvl = rabbitPet?.level || 1;
+              const hpPct = enemy.health / enemy.maxHealth;
+              let critChance = rabLvl >= 10 ? 0.12 : 0.05;
+              if (hpPct <= 0.5) {
+                critChance += rabLvl >= 50 ? 0.90 : rabLvl >= 10 ? 0.40 : 0.25;
+              }
+              if (options?.isRabbitSkill && rabLvl >= 50) {
+                critChance = 1.0; // 100% Guaranteed Crit at Lv 50
+              }
+              if (Math.random() < critChance) {
+                isCrit = true;
+                const critMult = hpPct <= 0.3 && rabLvl >= 30 ? 2.2 : 1.6;
+                finalDmg *= critMult;
+                soundEngine.playCritHit();
+                particleSys.spawnCritImpact(enemy.mesh.position);
+                if (rabLvl >= 20) {
+                  playerPhysics.speedBoostTimer = 2.0;
+                }
+              }
+            }
+
+            // Apply Damage & Combat Feedback
+            finalDmg = Math.round(finalDmg);
+            enemy.health -= finalDmg;
+            enemy.hitFlashTimer = 0.14;
+            particleSys.spawnDamageNumber(enemy.mesh.position, finalDmg, isCrit, enemy.isBoss);
+
+            if (enemy.isBoss) {
+              particleSys.spawnBossHit(enemy.mesh.position);
+            } else {
+              particleSys.spawnCombatHit(enemy.mesh.position, isCrit ? 0xffb703 : 0xff0054);
+            }
+            if (!isCrit) soundEngine.playCombatHit();
+
+            // Fox Burning Spirit: applies damage over time to targets hit by Fox's abilities
+            if (options?.isFoxSkill && hasBurningSpirit) {
+              const foxLvl = foxPet?.level || 1;
+              enemy.burnTimer = foxLvl >= 20 ? 4.5 : 3.0;
+              enemy.burnDmgPerTick = Math.round(15 + foxLvl * 1.6);
+              enemy.burnTickTimer = 0;
+              enemy.burnSourceLevel = foxLvl;
+              if (foxLvl >= 20) {
+                enemy.slowTimer = 4.0;
+                enemy.slowFactor = 0.75;
+              }
+              particleSys.spawnBurnTick(enemy.mesh.position);
+            }
+
+            // Status effects from options
+            if (options?.stunDuration && options.stunDuration > 0) {
+              enemy.stunTimer = Math.max(enemy.stunTimer, options.stunDuration);
+              particleSys.spawnStunStars(enemy.mesh.position);
+            }
+            if (options?.slowDuration && options.slowDuration > 0 && options.slowPct) {
+              enemy.slowTimer = Math.max(enemy.slowTimer, options.slowDuration);
+              enemy.slowFactor = Math.min(enemy.slowFactor, 1 - options.slowPct);
+            }
+            if (options?.airborne) {
+              enemy.isAirborne = true;
+              enemy.airborneTimer = 0.6;
+            }
+            if (options?.armorRupture) {
+              enemy.armorRuptureTimer = 5.0;
+            }
+
+            // Physical Knockback
+            const kbDist = options?.knockback || 0.8;
+            const kb = _vec3A.subVectors(enemy.mesh.position, center).normalize().multiplyScalar(kbDist);
+            enemy.mesh.position.add(kb);
 
             // Update health bar scale
             const pct = Math.max(0, enemy.health / enemy.maxHealth);
             enemy.healthBarForeground.scale.x = pct;
 
-            // Knockback slightly away from center
-            const kb = _vec3A.subVectors(enemy.mesh.position, center).normalize().multiplyScalar(0.8);
-            enemy.mesh.position.add(kb);
-
             // Defeated check
             if (enemy.health <= 0) {
+              // Fox Lv 30 Spreading Embers: spreads burn to nearby enemies
+              if (enemy.burnTimer > 0 && hasBurningSpirit && (foxPet?.level || 1) >= 30) {
+                for (const other of activeEnemies) {
+                  if (other !== enemy && other.health > 0 && other.mesh.position.distanceTo(enemy.mesh.position) <= 5.0) {
+                    other.burnTimer = 3.5;
+                    other.burnDmgPerTick = enemy.burnDmgPerTick;
+                    particleSys.spawnBurnTick(other.mesh.position);
+                  }
+                }
+              }
+              // Rabbit Lv 40 Hunting Rush: crit kill restores 8% max HP
+              if (isCrit && hasPredatorInstinct && (rabbitPet?.level || 1) >= 40) {
+                const heal = Math.round((stateRef.current.player.maxHealth || 100) * 0.08);
+                stateRef.current.onUpdatePlayer((prev) => ({
+                  ...prev,
+                  health: Math.min(prev.maxHealth || 100, (prev.health ?? 100) + heal),
+                }));
+                particleSys.spawnHealingBubbles(playerPhysics.pos);
+              }
+
               particleSys.spawnEnemyDefeat(enemy.mesh.position);
               soundEngine.playEnemyDefeat();
               enemiesGroup.remove(enemy.mesh);
@@ -794,43 +1099,77 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
         }
+
+        // Rabbit Lv 40 Celerity Bounce refund:
+        if (options?.isRabbitSkill && enemiesHitCount >= 2 && (rabbitPet?.level || 1) >= 40) {
+          stateRef.current.onShowMessage('⚡ Celerity Bounce! Multi-hit refunded 50% cooldown!');
+        }
       };
 
       if (petId === 'pet_fox') {
-        // Flame Dash: dashes forward leaving radiant trail, damages enemies, speeds up crops
+        // FOX: Flame Dash (Active) & Burning Spirit (Passive)
+        const stats = computeActiveSkillStats('pet_fox', level) as any;
         soundEngine.playFlameDash();
-        playerPhysics.speedBoostTimer = 3.0;
-        particleSys.spawnFlameTrail(pPos);
-        stateRef.current.onShowMessage('Ember activated Flame Dash! (+75% speed boost & 85 damage)');
-        dealDamageInRadius(pPos, 5.0, 85 + level * 10);
+        playerPhysics.speedBoostTimer = 3.5;
+        stateRef.current.onShowMessage(`Ember used Flame Dash! (${stats.damage} damage & burning trail)`);
 
-        if (!inWild) {
-          const currentPlots = [...stateRef.current.farmPlots];
-          let boosted = false;
-          currentPlots.forEach((plot) => {
-            const dist = Math.hypot(plot.x - pPos.x, plot.z - pPos.z);
-            if (dist < 4.5 && plot.cropId && plot.growProgress < 1.0) {
-              plot.growProgress = Math.min(1.0, plot.growProgress + 0.35);
-              boosted = true;
-            }
+        // Smooth forward dash animation across frames
+        playerPhysics.dashTimer = 0.28;
+        playerPhysics.dashSpeed = 22.0;
+        playerPhysics.dashDir.set(Math.sin(playerPhysics.rotY), 0, Math.cos(playerPhysics.rotY));
+        particleSys.spawnFlameTrail(playerPhysics.pos);
+        particleSys.spawnFlameGroundPatch(playerPhysics.pos);
+
+        // At end of dash, radial explosion + damage
+        setTimeout(() => {
+          particleSys.spawnFlameExplosion(playerPhysics.pos, stats.radius);
+          particleSys.spawnFlameGroundPatch(playerPhysics.pos);
+          dealDamageInRadius(playerPhysics.pos, stats.radius, stats.damage, {
+            isFoxSkill: true,
+            knockback: 1.2,
           });
-          if (boosted) {
-            stateRef.current.onUpdatePlots(currentPlots);
-            rebuildFarmPlotMeshes(currentPlots);
+
+          if (!inWild) {
+            const currentPlots = [...stateRef.current.farmPlots];
+            let boosted = false;
+            currentPlots.forEach((plot) => {
+              const dist = Math.hypot(plot.x - pPos.x, plot.z - pPos.z);
+              if (dist < 5.0 && plot.cropId && plot.growProgress < 1.0) {
+                plot.growProgress = Math.min(1.0, plot.growProgress + 0.4);
+                boosted = true;
+              }
+            });
+            if (boosted) {
+              stateRef.current.onUpdatePlots(currentPlots);
+              rebuildFarmPlotMeshes(currentPlots);
+            }
           }
-        }
+        }, 280);
       } else if (petId === 'pet_turtle') {
-        // Water Shield: hydro sphere waters crops, shields player, damages nearby foes
-        soundEngine.playWaterShield();
-        particleSys.spawnWaterBurst(pPos, 6.0);
-        playerPhysics.shield = 50 + level * 8;
-        dealDamageInRadius(pPos, 6.0, 50 + level * 8);
-        stateRef.current.onShowMessage('Shelly cast Water Shield! Shield active & surrounding foes splashed.');
+        // TURTLE: Tidal Barrier (Active) & Ocean Armor (Passive)
+        const stats = computeActiveSkillStats('pet_turtle', level) as any;
+        soundEngine.playTidalBarrier();
+        particleSys.spawnWaterBurst(pPos, stats.radius);
+        particleSys.spawnShieldRipple(pPos);
+        playerPhysics.shield = stats.shield;
+        playerPhysics.maxShield = stats.shield;
+
+        if (waterShieldMesh) {
+          waterShieldMesh.visible = true;
+          waterShieldMesh.scale.set(1.25, 1.25, 1.25);
+        }
+
+        dealDamageInRadius(pPos, stats.radius, stats.damage, {
+          knockback: stats.knockbackForce,
+          slowPct: stats.slowPct,
+          slowDuration: 3.0,
+        });
+        stateRef.current.onShowMessage(`Shelly cast Tidal Barrier! +${stats.shield} Water Shield & shockwave repelled foes.`);
 
         if (!inWild) {
           const currentPlots = stateRef.current.farmPlots.map((plot) => {
             const dist = Math.hypot(plot.x - pPos.x, plot.z - pPos.z);
-            if (dist <= 6.5 && plot.tilled) {
+            if (dist <= 7.0 && plot.tilled) {
               return { ...plot, watered: true, waterLevel: 1.0 };
             }
             return plot;
@@ -839,131 +1178,278 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           rebuildFarmPlotMeshes(currentPlots);
         }
       } else if (petId === 'pet_rabbit') {
-        // Swift Leap: giant harvest jump stomps enemies on landing
-        soundEngine.playSwiftLeap();
-        playerPhysics.velY = 13.5;
-        playerPhysics.isGrounded = false;
-        stateRef.current.onShowMessage('Hoppy activated Swift Leap! Ground stomp attack.');
+        // RABBIT: Phantom Leap (Active) & Predator Instinct (Passive)
+        const stats = computeActiveSkillStats('pet_rabbit', level) as any;
+        soundEngine.playPhantomLeap();
+
+        // Squash anticipation
+        playerMesh.scale.set(1.25, 0.65, 1.25);
+        stateRef.current.onShowMessage(`Hoppy executed Phantom Leap! (${stats.damage} area stomp damage)`);
 
         setTimeout(() => {
-          dealDamageInRadius(playerPhysics.pos, 5.5, 70 + level * 8);
+          playerPhysics.velY = 16.5;
+          playerPhysics.isGrounded = false;
+          playerMesh.scale.set(0.85, 1.3, 0.85);
 
-          if (!inWild) {
-            const currentPlots = [...stateRef.current.farmPlots];
-            let harvestCount = 0;
-            currentPlots.forEach((plot) => {
-              const dist = Math.hypot(plot.x - playerPhysics.pos.x, plot.z - playerPhysics.pos.z);
-              if (dist < 5.0 && plot.cropId && plot.growProgress >= 1.0) {
-                const crop = plot.cropId;
-                plot.cropId = null;
-                plot.plantedAt = null;
-                plot.growProgress = 0;
-                stateRef.current.onAddInventory(crop, 2);
-                stateRef.current.onUpdatePlayer((prev) => ({ ...prev, gold: prev.gold + 25 }));
-                particleSys.spawnHarvestBurst(new THREE.Vector3(plot.x, 0.5, plot.z));
-                harvestCount++;
-              }
+          // Launch forward arc
+          const leapFwd = _vec3A.set(Math.sin(playerPhysics.rotY), 0, Math.cos(playerPhysics.rotY)).multiplyScalar(6.5);
+          playerPhysics.pos.add(leapFwd);
+
+          // Phantom motion silhouette trail
+          particleSys.spawnPhantomTrail(playerPhysics.pos, playerPhysics.rotY);
+
+          setTimeout(() => {
+            // Landing impact: crater decal + landing stomp shockwave + recovery squash
+            playerMesh.scale.set(1.3, 0.65, 1.3);
+            particleSys.spawnCraterDecal(playerPhysics.pos, stats.radius);
+            particleSys.spawnPhantomLanding(playerPhysics.pos, stats.radius);
+
+            dealDamageInRadius(playerPhysics.pos, stats.radius, stats.damage, {
+              isRabbitSkill: true,
+              airborne: stats.knockbackAirborne,
+              knockback: 1.4,
             });
-            if (harvestCount > 0) {
-              soundEngine.playHarvest();
-              stateRef.current.onUpdatePlots(currentPlots);
-              rebuildFarmPlotMeshes(currentPlots);
-              stateRef.current.onShowMessage(`Swift Leap harvested ${harvestCount} crops!`);
+
+            setTimeout(() => {
+              playerMesh.scale.set(1, 1, 1);
+            }, 120);
+
+            if (!inWild) {
+              const currentPlots = [...stateRef.current.farmPlots];
+              let harvestCount = 0;
+              currentPlots.forEach((plot) => {
+                const dist = Math.hypot(plot.x - playerPhysics.pos.x, plot.z - playerPhysics.pos.z);
+                if (dist < 5.5 && plot.cropId && plot.growProgress >= 1.0) {
+                  const crop = plot.cropId;
+                  plot.cropId = null;
+                  plot.plantedAt = null;
+                  plot.growProgress = 0;
+                  stateRef.current.onAddInventory(crop, 2);
+                  stateRef.current.onUpdatePlayer((prev) => ({ ...prev, gold: prev.gold + 30 }));
+                  particleSys.spawnHarvestBurst(new THREE.Vector3(plot.x, 0.5, plot.z));
+                  harvestCount++;
+                }
+              });
+              if (harvestCount > 0) {
+                soundEngine.playHarvest();
+                stateRef.current.onUpdatePlots(currentPlots);
+                rebuildFarmPlotMeshes(currentPlots);
+                stateRef.current.onShowMessage(`Phantom Leap harvested ${harvestCount} crops!`);
+              }
             }
-          }
-        }, 550);
+          }, 360);
+        }, 90);
       } else if (petId === 'pet_owl') {
-        // Wind Gust: knocks back enemies & pollinates crops
-        soundEngine.playWindGust();
-        _vec3A.set(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerPhysics.rotY);
-        particleSys.spawnWindGust(pPos, _vec3A);
-        dealDamageInRadius(pPos, 7.0, 55 + level * 7);
-        stateRef.current.onShowMessage('Barnaby summoned Wind Gust! Enemies knocked back.');
+        // OWL: Cyclone (Active) & Aerial Hunter (Passive)
+        const stats = computeActiveSkillStats('pet_owl', level) as any;
+        soundEngine.playCyclone();
+        stateRef.current.onShowMessage(`Barnaby created Cyclone! Tornado pulls enemies together and shreds them!`);
+
+        // Spawn position: 4m ahead of player
+        const spawnPos = playerPhysics.pos.clone();
+        const fwd = _vec3A.set(Math.sin(playerPhysics.rotY), 0, Math.cos(playerPhysics.rotY));
+        spawnPos.addScaledVector(fwd, 4.0);
+
+        // Multi-layer rotating 3D tornado group with tiered rings and floating leaves
+        const cycloneGroup = new THREE.Group();
+        cycloneGroup.position.copy(spawnPos);
+        const windMat = new THREE.MeshBasicMaterial({ color: 0x99f6e4, transparent: true, opacity: 0.65, side: THREE.DoubleSide });
+        const leafMat = new THREE.MeshBasicMaterial({ color: 0x52b788, side: THREE.DoubleSide });
+
+        for (let ringIdx = 0; ringIdx < 6; ringIdx++) {
+          const r = 0.4 + ringIdx * 0.45;
+          const torus = new THREE.Mesh(new THREE.TorusGeometry(r, 0.07, 6, 18), windMat);
+          torus.rotation.x = Math.PI / 2;
+          torus.position.y = 0.15 + ringIdx * 0.62;
+          cycloneGroup.add(torus);
+
+          // Add orbiting autumn leaves
+          for (let l = 0; l < 2; l++) {
+            const leaf = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.14), leafMat);
+            const ang = (l * Math.PI) + ringIdx * 0.7;
+            leaf.position.set(Math.cos(ang) * (r * 0.9), torus.position.y, Math.sin(ang) * (r * 0.9));
+            leaf.rotation.set(Math.random(), Math.random(), Math.random());
+            cycloneGroup.add(leaf);
+          }
+        }
+        scene.add(cycloneGroup);
+
+        particleSys.spawnCycloneVortex(spawnPos, stats.duration, stats.radius);
+
+        activeCyclones.push({
+          mesh: cycloneGroup,
+          pos: spawnPos,
+          duration: stats.duration,
+          maxDuration: stats.duration,
+          radius: stats.radius,
+          tickTimer: 0,
+          tickDamage: stats.tickDamage,
+          level,
+          hasRazorFeathers: stats.razorFeathers,
+          hasCenterStun: stats.centerStun,
+        });
 
         if (!inWild) {
           const currentPlots = [...stateRef.current.farmPlots];
           currentPlots.forEach((plot) => {
             if (plot.cropId && plot.growProgress < 1.0) {
-              plot.growProgress = Math.min(1.0, plot.growProgress + 0.25);
+              plot.growProgress = Math.min(1.0, plot.growProgress + 0.35);
             }
           });
           stateRef.current.onUpdatePlots(currentPlots);
           rebuildFarmPlotMeshes(currentPlots);
-
-          const seedTypes = ['seed_strawberry', 'seed_tomato', 'seed_carrot'];
-          const randomSeed = seedTypes[Math.floor(Math.random() * seedTypes.length)];
-          stateRef.current.onAddInventory(randomSeed, 2);
+          const seedTypes = ['seed_pumpkin', 'seed_corn', 'seed_strawberry'];
+          stateRef.current.onAddInventory(seedTypes[Math.floor(Math.random() * seedTypes.length)], 2);
         }
       } else if (petId === 'pet_bear') {
-        // Ground Slam: heavy seismic shockwave deal massive damage
-        soundEngine.playGroundSlam();
-        particleSys.spawnGroundSlam(pPos, 7.0);
-        dealDamageInRadius(pPos, 7.5, 110 + level * 15);
-        stateRef.current.onShowMessage('Grizz unleashed Ground Slam! Seismic shockwave hits all foes.');
+        // BEAR: Earthshatter (Active) & Unyielding (Passive)
+        const stats = computeActiveSkillStats('pet_bear', level) as any;
+        soundEngine.playEarthshatter();
 
-        if (!inWild) {
-          const currentPlots = stateRef.current.farmPlots.map((plot) => {
-            const dist = Math.hypot(plot.x - pPos.x, plot.z - pPos.z);
-            if (dist <= 6.5) return { ...plot, tilled: true };
-            return plot;
+        // Heavy attack anticipation: rear up arms and pause
+        if (playerMesh.userData.leftArm) playerMesh.userData.leftArm.rotation.x = -2.4;
+        if (playerMesh.userData.rightArm) playerMesh.userData.rightArm.rotation.x = -2.4;
+        playerMesh.position.y += 0.25;
+        stateRef.current.onShowMessage(`Grizz unleashed Earthshatter! Stunned surrounding foes for ${stats.stunDuration}s!`);
+
+        setTimeout(() => {
+          playerMesh.position.y = playerPhysics.pos.y;
+          if (playerMesh.userData.leftArm) playerMesh.userData.leftArm.rotation.x = 0;
+          if (playerMesh.userData.rightArm) playerMesh.userData.rightArm.rotation.x = 0;
+
+          // Ground impact: radial fissures, stone spikes, flying rocks
+          particleSys.spawnFissureCracks(playerPhysics.pos, stats.radius);
+          particleSys.spawnEarthshatterSpikes(playerPhysics.pos, stats.radius);
+
+          dealDamageInRadius(playerPhysics.pos, stats.radius, stats.damage, {
+            isBearSkill: true,
+            stunDuration: stats.stunDuration,
+            armorRupture: stats.armorRupture,
+            knockback: 1.8,
           });
-          stateRef.current.onUpdatePlots(currentPlots);
-          rebuildFarmPlotMeshes(currentPlots);
 
-          const distToQuarry = Math.hypot(23 - pPos.x, -8 - pPos.z);
-          if (distToQuarry < 8) {
-            stateRef.current.onAddInventory('stone', 8);
-            stateRef.current.onShowMessage('Quarry mined: +8 Stone!');
+          if (!inWild) {
+            const currentPlots = stateRef.current.farmPlots.map((plot) => {
+              const dist = Math.hypot(plot.x - playerPhysics.pos.x, plot.z - playerPhysics.pos.z);
+              if (dist <= 7.5) return { ...plot, tilled: true };
+              return plot;
+            });
+            stateRef.current.onUpdatePlots(currentPlots);
+            rebuildFarmPlotMeshes(currentPlots);
+            const distToQuarry = Math.hypot(23 - playerPhysics.pos.x, -8 - playerPhysics.pos.z);
+            if (distToQuarry < 9) {
+              stateRef.current.onAddInventory('stone', 12);
+              stateRef.current.onShowMessage('Quarry shattered: +12 Stone!');
+            }
           }
-        }
+        }, 220);
       } else if (petId === 'pet_slime') {
-        // Healing Bubble: restores player HP and heals pets
-        soundEngine.playHealingBubble();
-        particleSys.spawnHealingBubbles(pPos);
-        const healAmt = 45 + level * 5;
-        stateRef.current.onUpdatePlayer((prev) => ({
-          ...prev,
-          health: Math.min(prev.maxHealth || 100, (prev.health ?? prev.maxHealth ?? 100) + healAmt),
-        }));
-        dealDamageInRadius(pPos, 5.0, 35);
-        stateRef.current.onShowMessage(`Boba used Healing Bubble! Restored +${healAmt} HP!`);
+        // SLIME: Arcane Burst (Active) & Gelatinous Body (Passive)
+        const stats = computeActiveSkillStats('pet_slime', level) as any;
+
+        // Charging anticipation: glowing mana orb grows above player
+        const chargeOrb = new THREE.Mesh(
+          new THREE.SphereGeometry(0.3, 12, 12),
+          new THREE.MeshBasicMaterial({ color: 0x9d4edd, wireframe: true, transparent: true, opacity: 0.85 })
+        );
+        chargeOrb.position.set(playerPhysics.pos.x, playerPhysics.pos.y + 1.6, playerPhysics.pos.z);
+        scene.add(chargeOrb);
+
+        setTimeout(() => {
+          scene.remove(chargeOrb);
+          chargeOrb.geometry.dispose();
+          (chargeOrb.material as THREE.Material).dispose();
+
+          soundEngine.playArcaneBurst();
+          particleSys.spawnArcaneNova(playerPhysics.pos, stats.radius);
+          particleSys.spawnAscendingHealAura(playerPhysics.pos);
+
+          dealDamageInRadius(playerPhysics.pos, stats.radius, stats.damage, {
+            isSlimeSkill: true,
+            slowPct: stats.slowDuration > 0 ? 0.5 : 0,
+            slowDuration: stats.slowDuration,
+          });
+
+          // Restores Player Health & floating green heal number
+          stateRef.current.onUpdatePlayer((prev) => ({
+            ...prev,
+            health: Math.min(prev.maxHealth || 100, (prev.health ?? prev.maxHealth ?? 100) + stats.heal),
+          }));
+          particleSys.spawnDamageNumber(playerPhysics.pos, stats.heal, false, false, 'heal');
+          particleSys.spawnHealingBubbles(playerPhysics.pos);
+          stateRef.current.onShowMessage(`Boba cast Arcane Burst! Restored +${stats.heal} HP & blasted enemies!`);
+
+          if (stats.doubleEcho) {
+            setTimeout(() => {
+              if (stateRef.current.currentLocation === 'wild_grounds') {
+                particleSys.spawnArcaneNova(playerPhysics.pos, stats.radius * 0.8);
+                dealDamageInRadius(playerPhysics.pos, stats.radius * 0.8, stats.damage * 0.6, { isSlimeSkill: true });
+              }
+            }, 600);
+          }
+
+          stateRef.current.onUpdatePets((prev) =>
+            prev.map((p) => ({ ...p, happiness: 100, hunger: 100 }))
+          );
+        }, 220);
 
         stateRef.current.onUpdatePets((prev) =>
           prev.map((p) => ({ ...p, happiness: 100, hunger: 100 }))
         );
       } else if (petId === 'pet_frog') {
+        // Frog Splash Hop
+        const stats = computeActiveSkillStats('pet_frog', level) as any;
         soundEngine.playWaterSplash();
-        particleSys.spawnWaterBurst(pPos, 5.0);
-        dealDamageInRadius(pPos, 5.5, 65 + level * 8);
-        stateRef.current.onShowMessage('Puddles used Splash Hop! Tidal wave strikes foes.');
+        particleSys.spawnWaterBurst(pPos, stats.radius);
+        dealDamageInRadius(pPos, stats.radius, stats.damage, {
+          knockback: 1.2,
+          slowPct: stats.slowPct,
+          slowDuration: 2.5,
+        });
+        stateRef.current.onShowMessage(`Puddles used Splash Hop! Tidal wave strikes foes for ${stats.damage} damage.`);
       } else if (petId === 'pet_wolf') {
+        // Wolf Lunar Howl
+        const stats = computeActiveSkillStats('pet_wolf', level) as any;
         soundEngine.playBossRoar();
-        particleSys.spawnGroundSlam(pPos, 6.0);
+        particleSys.spawnEarthshatterSpikes(pPos, stats.radius);
         playerPhysics.speedBoostTimer = 4.0;
-        dealDamageInRadius(pPos, 6.5, 80 + level * 10);
-        stateRef.current.onShowMessage('Shadow howled! Enemies intimidated and speed boosted.');
+        dealDamageInRadius(pPos, stats.radius, stats.damage, {
+          stunDuration: stats.fearDuration,
+          knockback: 1.4,
+        });
+        stateRef.current.onShowMessage(`Shadow howled! Fear strikes foes and attack power boosted by +${Math.round(stats.attackBoostPct * 100)}%!`);
       } else if (petId === 'pet_deer') {
+        // Deer Nature Sprint
+        const stats = computeActiveSkillStats('pet_deer', level) as any;
         soundEngine.playSwiftLeap();
         playerPhysics.speedBoostTimer = 4.0;
         stateRef.current.onUpdatePlayer((prev) => ({
           ...prev,
-          health: Math.min(prev.maxHealth || 100, (prev.health ?? 100) + 30),
+          health: Math.min(prev.maxHealth || 100, (prev.health ?? 100) + stats.heal),
         }));
-        dealDamageInRadius(pPos, 5.0, 50);
-        stateRef.current.onShowMessage('Fawn sprinted forward! Restored +30 HP & speed boosted.');
+        dealDamageInRadius(pPos, stats.radius, stats.damage);
+        stateRef.current.onShowMessage(`Fawn sprinted forward! Restored +${stats.heal} HP & surging speed!`);
       } else if (petId === 'pet_dragon') {
+        // Dragon Inferno Nova
+        const stats = computeActiveSkillStats('pet_dragon', level) as any;
         soundEngine.playBossRoar();
-        particleSys.spawnFlameTrail(pPos);
-        particleSys.spawnGroundSlam(pPos, 8.5);
-        dealDamageInRadius(pPos, 8.5, 180 + level * 25);
-        stateRef.current.onShowMessage('Ignis unleashed Inferno Nova! Massive 180 damage blast!');
+        particleSys.spawnFlameExplosion(pPos, stats.radius);
+        particleSys.spawnEarthshatterSpikes(pPos, stats.radius);
+        dealDamageInRadius(pPos, stats.radius, stats.damage, {
+          isFoxSkill: true,
+          knockback: 2.5,
+        });
+        stateRef.current.onShowMessage(`Ignis unleashed Inferno Nova! Massive ${stats.damage} cataclysmic damage!`);
       } else if (petId === 'pet_phoenix') {
+        // Phoenix Solar Flare
+        const stats = computeActiveSkillStats('pet_phoenix', level) as any;
         soundEngine.playVictory();
-        particleSys.spawnHealingBubbles(pPos);
-        particleSys.spawnWaterBurst(pPos, 8.0);
+        particleSys.spawnArcaneNova(pPos, stats.radius);
         stateRef.current.onUpdatePlayer((prev) => ({ ...prev, health: prev.maxHealth || 100 }));
-        dealDamageInRadius(pPos, 8.0, 160 + level * 20);
-        stateRef.current.onShowMessage('Solara summoned Solar Flare! 100% HP Revive & Holy Blast!');
+        dealDamageInRadius(pPos, stats.radius, stats.damage, {
+          stunDuration: stats.blindStun ? 2.0 : 0,
+        });
+        stateRef.current.onShowMessage(`Solara summoned Solar Flare! 100% Full Health Revive & Holy Blast!`);
       }
     }
 
@@ -981,6 +1467,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           instanceEnvironmentGroup.visible = true;
           playerPhysics.pos.set(0, 0, 0);
           playerPhysics.rotY = 0;
+          playerPhysics.shield = 0;
+          if (waterShieldMesh) waterShieldMesh.visible = false;
+          bearCheatDeathUsed = false;
+          slimeCheatDeathUsed = false;
+          fortitudeStacks = 0;
+          fortitudeTimer = 0;
+          outOfCombatDamageTimer = 5.0;
           currentWaveIndex = 0;
           prepCountdownTimer = 4.0;
           waveClearedSummary = { wavesCleared: 0, essenceEarned: 0, goldEarned: 0 };
@@ -1058,6 +1551,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
+      // Smooth continuous Flame Dash forward translation across frames
+      if (playerPhysics.dashTimer > 0) {
+        playerPhysics.dashTimer -= delta;
+        playerPhysics.pos.addScaledVector(playerPhysics.dashDir, playerPhysics.dashSpeed * delta);
+        particleSys.spawnFlameTrail(playerPhysics.pos);
+        if (Math.random() < 0.45) {
+          particleSys.spawnFlameGroundPatch(playerPhysics.pos);
+        }
+      }
+
       if (isMoving) {
         const normX = moveX / inputLen;
         const normZ = moveZ / inputLen;
@@ -1126,6 +1629,78 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       playerMesh.position.copy(playerPhysics.pos);
       playerMesh.rotation.y = playerPhysics.rotY;
 
+      // Invulnerability tick
+      if (playerPhysics.invulnTimer > 0) {
+        playerPhysics.invulnTimer -= delta;
+      }
+
+      // Bear Fortitude decay
+      if (fortitudeTimer > 0) {
+        fortitudeTimer -= delta;
+        if (fortitudeTimer <= 0) {
+          fortitudeStacks = 0;
+        }
+      }
+
+      // Slime Gelatinous Body out-of-combat heal (avoids damage for 3.5s)
+      outOfCombatDamageTimer += delta;
+      const equippedSlots = stateRef.current.player.equippedSkillSlots;
+      if (equippedSlots.includes('pet_slime') && outOfCombatDamageTimer >= 3.5) {
+        slimeRegenTicker += delta;
+        if (slimeRegenTicker >= 2.0) {
+          slimeRegenTicker = 0;
+          const slimePet = stateRef.current.pets.find((p) => p.id === 'pet_slime');
+          const sLvl = slimePet?.level || 1;
+          const regenAmount = Math.round(5 + sLvl * 1.4);
+          stateRef.current.onUpdatePlayer((prev) => {
+            const maxHp = prev.maxHealth || 100;
+            const cur = prev.health ?? maxHp;
+            if (cur < maxHp) {
+              const next = Math.min(maxHp, cur + regenAmount);
+              particleSys.spawnHealingBubbles(playerPhysics.pos);
+              return { ...prev, health: next };
+            }
+            return prev;
+          });
+        }
+      }
+
+      // Water Shield Mesh multi-layer animation & visual feedback
+      if (playerPhysics.shield > 0) {
+        waterShieldMesh.visible = true;
+        const shieldData = waterShieldMesh.userData as any;
+        if (shieldData) {
+          if (shieldData.outerShield) shieldData.outerShield.rotation.y += delta * 1.8;
+          if (shieldData.innerShield) shieldData.innerShield.rotation.y -= delta * 2.4;
+          if (shieldData.ring1) shieldData.ring1.rotation.z += delta * 3.2;
+          if (shieldData.ring2) shieldData.ring2.rotation.x += delta * 2.6;
+          if (shieldData.orbGroup) shieldData.orbGroup.rotation.y += delta * 4.2;
+
+          // Hit flash reaction
+          if (shieldData.hitFlashTimer > 0) {
+            shieldData.hitFlashTimer -= delta;
+            waterShieldMesh.scale.set(1.22, 1.22, 1.22);
+          } else {
+            waterShieldMesh.scale.lerp(_vec3ScaleNormal, Math.min(delta * 8, 1));
+          }
+
+          // Low-shield visual feedback (under 35% shield)
+          const shieldPct = playerPhysics.shield / Math.max(1, playerPhysics.maxShield);
+          if (shieldPct < 0.35) {
+            const pulse = 0.65 + Math.sin(now * 0.012) * 0.25;
+            if (shieldData.outerShield?.material) {
+              shieldData.outerShield.material.opacity = 0.45 * pulse;
+            }
+          } else if (shieldData.outerShield?.material) {
+            shieldData.outerShield.material.opacity = 0.55;
+          }
+        } else {
+          waterShieldMesh.rotation.y += delta * 3.2;
+        }
+      } else {
+        waterShieldMesh.visible = false;
+      }
+
       // Third-person camera tracking
       const targetCamX = playerPhysics.pos.x - Math.sin(camYaw) * (camDist * Math.cos(camPitch));
       const targetCamY = playerPhysics.pos.y + 1.2 + camDist * Math.sin(camPitch);
@@ -1193,20 +1768,206 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             });
           }
         } else {
-          // Enemies AI update
-          for (const enemy of activeEnemies) {
+          // 1. Update active cyclones (Owl Cyclone active skill)
+          for (let cIdx = activeCyclones.length - 1; cIdx >= 0; cIdx--) {
+            const cyc = activeCyclones[cIdx];
+            cyc.duration -= delta;
+            cyc.mesh.rotation.y += delta * 7.5;
+            cyc.mesh.children.forEach((child, idx) => {
+              child.rotation.z += delta * (idx % 2 === 0 ? 3.5 : -3.5);
+            });
+
+            cyc.tickTimer -= delta;
+            const isTick = cyc.tickTimer <= 0;
+            if (isTick) cyc.tickTimer = 0.35;
+
+            // Pull enemies towards cyclone and apply shredding damage ticks
+            for (let eIdx = activeEnemies.length - 1; eIdx >= 0; eIdx--) {
+              const enemy = activeEnemies[eIdx];
+              const dist = enemy.mesh.position.distanceTo(cyc.pos);
+              if (dist <= cyc.radius) {
+                // Inward vortex pull
+                const pullDir = _vec3A.subVectors(cyc.pos, enemy.mesh.position).normalize();
+                const pullPower = Math.min(dist, (cyc.radius - dist + 1) * 3.4 * delta);
+                enemy.mesh.position.addScaledVector(pullDir, pullPower);
+                enemy.slowTimer = Math.max(enemy.slowTimer, 0.4);
+                enemy.slowFactor = 0.45;
+
+                if (isTick) {
+                  let tickDmg = cyc.tickDamage;
+                  const equipped = stateRef.current.player.equippedSkillSlots;
+                  if (equipped.includes('pet_owl')) {
+                    const owlPet = stateRef.current.pets.find((p) => p.id === 'pet_owl');
+                    const owlLvl = owlPet?.level || 1;
+                    const owlBonus = owlLvl >= 50 ? 0.5 : owlLvl >= 10 ? 0.3 : 0.2;
+                    tickDmg *= 1 + owlBonus;
+                  }
+                  if (cyc.hasRazorFeathers) tickDmg *= 1.35;
+                  tickDmg = Math.round(tickDmg);
+
+                  enemy.health -= tickDmg;
+                  particleSys.spawnCombatHit(enemy.mesh.position, 0x99f6e4);
+                  particleSys.spawnDamageNumber(enemy.mesh.position, tickDmg, false, enemy.isBoss);
+                  enemy.hitFlashTimer = 0.14;
+
+                  if (cyc.hasCenterStun && dist < 1.6) {
+                    enemy.stunTimer = Math.max(enemy.stunTimer, 1.2);
+                    particleSys.spawnStunStars(enemy.mesh.position);
+                  }
+
+                  const pct = Math.max(0, enemy.health / enemy.maxHealth);
+                  enemy.healthBarForeground.scale.x = pct;
+
+                  if (enemy.health <= 0) {
+                    particleSys.spawnEnemyDefeat(enemy.mesh.position);
+                    soundEngine.playEnemyDefeat();
+                    enemiesGroup.remove(enemy.mesh);
+                    activeEnemies.splice(eIdx, 1);
+
+                    const waveConfig = INSTANCE_WAVES[currentWaveIndex] || INSTANCE_WAVES[0];
+                    const rewardPiece = Math.max(1, Math.round(waveConfig.essenceReward / waveConfig.enemyCount));
+                    waveClearedSummary.essenceEarned += rewardPiece;
+                    stateRef.current.onUpdatePlayer((prev) => ({
+                      ...prev,
+                      petEssence: (prev.petEssence || 0) + rewardPiece,
+                    }));
+                    stateRef.current.onWaveInfoChange({
+                      wave: currentWaveIndex + 1,
+                      title: waveConfig.title,
+                      enemiesRemaining: activeEnemies.length,
+                      prepCountdown: prepCountdownTimer,
+                    });
+                  }
+                }
+              }
+            }
+
+            if (cyc.duration <= 0) {
+              particleSys.spawnCycloneDispersion(cyc.pos, cyc.radius);
+              scene.remove(cyc.mesh);
+              cyc.mesh.traverse((obj) => {
+                if ((obj as THREE.Mesh).geometry) (obj as THREE.Mesh).geometry.dispose();
+                if ((obj as THREE.Mesh).material) {
+                  const m = (obj as THREE.Mesh).material;
+                  if (Array.isArray(m)) m.forEach((x) => x.dispose());
+                  else m.dispose();
+                }
+              });
+              activeCyclones.splice(cIdx, 1);
+            }
+          }
+
+          // 2. Enemies AI & Combat Status update
+          for (let eIdx = activeEnemies.length - 1; eIdx >= 0; eIdx--) {
+            const enemy = activeEnemies[eIdx];
             const ePos = enemy.mesh.position;
+
+            // Health bar billboard faces camera
+            const hb = enemy.mesh.children.find((c) => c !== enemy.mesh.children[0]);
+            if (hb) hb.rotation.y = camYaw;
+
+            // Hit reaction flash / squash animation
+            if (enemy.hitFlashTimer && enemy.hitFlashTimer > 0) {
+              enemy.hitFlashTimer -= delta;
+              enemy.mesh.scale.set(1.15, 0.88, 1.15);
+            } else {
+              enemy.mesh.scale.set(1, 1, 1);
+            }
+
+            // Process Burn DoT (Fox Burning Spirit Passive)
+            if (enemy.burnTimer > 0) {
+              enemy.burnTimer -= delta;
+              enemy.burnTickTimer -= delta;
+              if (enemy.burnTickTimer <= 0) {
+                enemy.burnTickTimer = 0.5;
+                enemy.health -= enemy.burnDmgPerTick;
+                particleSys.spawnBurnTick(ePos);
+                particleSys.spawnDamageNumber(ePos, enemy.burnDmgPerTick, false, false, 'burn');
+                const pct = Math.max(0, enemy.health / enemy.maxHealth);
+                enemy.healthBarForeground.scale.x = pct;
+
+                if (enemy.health <= 0) {
+                  const equipped = stateRef.current.player.equippedSkillSlots;
+                  const foxPet = stateRef.current.pets.find((p) => p.id === 'pet_fox');
+                  if (equipped.includes('pet_fox') && (foxPet?.level || 1) >= 30) {
+                    for (const other of activeEnemies) {
+                      if (other !== enemy && other.health > 0 && other.mesh.position.distanceTo(ePos) <= 5.0) {
+                        other.burnTimer = 3.5;
+                        other.burnDmgPerTick = enemy.burnDmgPerTick;
+                        particleSys.spawnBurnTick(other.mesh.position);
+                      }
+                    }
+                  }
+
+                  particleSys.spawnEnemyDefeat(ePos);
+                  soundEngine.playEnemyDefeat();
+                  enemiesGroup.remove(enemy.mesh);
+                  activeEnemies.splice(eIdx, 1);
+
+                  const waveConfig = INSTANCE_WAVES[currentWaveIndex] || INSTANCE_WAVES[0];
+                  const rewardPiece = Math.max(1, Math.round(waveConfig.essenceReward / waveConfig.enemyCount));
+                  waveClearedSummary.essenceEarned += rewardPiece;
+                  stateRef.current.onUpdatePlayer((prev) => ({
+                    ...prev,
+                    petEssence: (prev.petEssence || 0) + rewardPiece,
+                  }));
+                  stateRef.current.onWaveInfoChange({
+                    wave: currentWaveIndex + 1,
+                    title: waveConfig.title,
+                    enemiesRemaining: activeEnemies.length,
+                    prepCountdown: prepCountdownTimer,
+                  });
+                  continue;
+                }
+              }
+            }
+
+            // Process Stun Freeze (Bear Earthshatter / Owl Cyclone / etc.)
+            if (enemy.stunTimer > 0) {
+              enemy.stunTimer -= delta;
+              enemy.mesh.rotation.z = Math.sin(now * 0.015) * 0.15;
+              if (Math.random() < 0.12) {
+                particleSys.spawnStunStars(ePos);
+              }
+              continue; // Cannot move or attack while stunned
+            } else {
+              enemy.mesh.rotation.z = 0;
+            }
+
+            // Process Airborne Trajectory (Rabbit Phantom Leap)
+            if (enemy.isAirborne) {
+              enemy.airborneTimer -= delta;
+              enemy.mesh.position.y = Math.sin(((0.6 - enemy.airborneTimer) / 0.6) * Math.PI) * 2.2;
+              if (enemy.airborneTimer <= 0) {
+                enemy.isAirborne = false;
+                enemy.mesh.position.y = 0;
+              }
+              continue; // Cannot move or attack while airborne
+            }
+
+            // Armor rupture timer
+            if (enemy.armorRuptureTimer > 0) {
+              enemy.armorRuptureTimer -= delta;
+            }
+
+            // Effective movement speed (applying slow)
+            let effectiveSpeed = enemy.speed;
+            if (enemy.slowTimer > 0) {
+              enemy.slowTimer -= delta;
+              effectiveSpeed *= enemy.slowFactor || 0.6;
+            }
+
             const distToPlayer = ePos.distanceTo(playerPhysics.pos);
             const attackRange = enemy.isBoss ? 2.6 : 1.7;
 
             if (distToPlayer > attackRange) {
               // Move towards player
               const dir = _vec3A.subVectors(playerPhysics.pos, ePos).normalize();
-              ePos.addScaledVector(dir, enemy.speed * delta);
+              ePos.addScaledVector(dir, effectiveSpeed * delta);
               enemy.mesh.rotation.y = Math.atan2(dir.x, dir.z);
 
               // Lunge / run bounce
-              enemy.mesh.position.y = Math.abs(Math.sin(now * 0.008 * enemy.speed)) * 0.15;
+              enemy.mesh.position.y = Math.abs(Math.sin(now * 0.008 * effectiveSpeed)) * 0.15;
             } else {
               // Within attack range: attack player on cooldown
               enemy.attackTimer -= delta;
@@ -1214,22 +1975,113 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
               if (enemy.attackTimer <= 0) {
                 enemy.attackTimer = enemy.attackCooldown;
-                // Attack animation (lunge forward & back)
                 particleSys.spawnCombatHit(playerPhysics.pos, 0xff0054);
                 soundEngine.playCombatHit();
 
-                // Shield absorbs damage first
+                // Reset Slime out-of-combat heal timer when player takes damage
+                outOfCombatDamageTimer = 0;
+
+                // Invulnerability check
+                if (playerPhysics.invulnTimer > 0) {
+                  continue;
+                }
+
                 let incomingDmg = enemy.damage;
+                const equipped = stateRef.current.player.equippedSkillSlots;
+
+                // TURTLE PASSIVE: Ocean Armor (reduces incoming damage, scaling when HP is low)
+                if (equipped.includes('pet_turtle')) {
+                  const turtlePet = stateRef.current.pets.find((p) => p.id === 'pet_turtle');
+                  const tLvl = turtlePet?.level || 1;
+                  let redPct = tLvl >= 40 ? 0.30 : tLvl >= 20 ? 0.25 : tLvl >= 10 ? 0.20 : 0.15;
+
+                  const curHp = stateRef.current.player.health ?? stateRef.current.player.maxHealth ?? 100;
+                  const maxHp = stateRef.current.player.maxHealth || 100;
+                  const hpRatio = curHp / maxHp;
+                  if (hpRatio < 0.5) {
+                    const lowHpBonus = (1 - hpRatio / 0.5) * (tLvl >= 30 ? 0.35 : 0.20);
+                    redPct += lowHpBonus;
+                  }
+                  redPct = Math.min(0.68, redPct);
+                  incomingDmg *= 1 - redPct;
+
+                  // Turtle Lv 40 Shell Spikes: Reflect 35% damage back onto attacker
+                  if (tLvl >= 40) {
+                    const reflectDmg = Math.round(enemy.damage * 0.35);
+                    enemy.health -= reflectDmg;
+                    particleSys.spawnCombatHit(enemy.mesh.position, 0x38bdf8);
+                    soundEngine.playShieldAbsorb();
+                    const pct = Math.max(0, enemy.health / enemy.maxHealth);
+                    enemy.healthBarForeground.scale.x = pct;
+                    if (enemy.health <= 0) {
+                      particleSys.spawnEnemyDefeat(ePos);
+                      soundEngine.playEnemyDefeat();
+                      enemiesGroup.remove(enemy.mesh);
+                      activeEnemies.splice(eIdx, 1);
+                      continue;
+                    }
+                  }
+                }
+
+                // BEAR PASSIVE: Unyielding (taking damage builds fortitude resistance stacks)
+                if (equipped.includes('pet_bear')) {
+                  const bearPet = stateRef.current.pets.find((p) => p.id === 'pet_bear');
+                  const bLvl = bearPet?.level || 1;
+                  const stackReduction = bLvl >= 20 ? 0.10 : bLvl >= 10 ? 0.08 : 0.06;
+                  const totalFortReduction = Math.min(0.50, fortitudeStacks * stackReduction);
+                  incomingDmg *= 1 - totalFortReduction;
+
+                  fortitudeStacks = Math.min(5, fortitudeStacks + 1);
+                  fortitudeTimer = 5.0;
+                }
+
+                // Shield absorbs damage first (Tidal Barrier)
                 if (playerPhysics.shield > 0) {
                   const absorbed = Math.min(playerPhysics.shield, incomingDmg);
                   playerPhysics.shield -= absorbed;
                   incomingDmg -= absorbed;
+                  soundEngine.playShieldAbsorb();
+                  particleSys.spawnWaterBurst(playerPhysics.pos, 1.2);
+                  particleSys.spawnShieldRipple(playerPhysics.pos);
+                  particleSys.spawnDamageNumber(playerPhysics.pos, Math.round(absorbed), false, false, 'shield');
+                  if (waterShieldMesh) {
+                    (waterShieldMesh.userData as any).hitFlashTimer = 0.22;
+                  }
+                  if (playerPhysics.shield <= 0 && waterShieldMesh) {
+                    waterShieldMesh.visible = false;
+                  }
                 }
 
+                incomingDmg = Math.round(incomingDmg);
+
                 if (incomingDmg > 0) {
+                  particleSys.spawnDamageNumber(playerPhysics.pos, incomingDmg, false, true);
                   stateRef.current.onUpdatePlayer((prev) => {
-                    const nextHp = Math.max(0, (prev.health ?? prev.maxHealth ?? 100) - incomingDmg);
+                    const curHp = prev.health ?? prev.maxHealth ?? 100;
+                    let nextHp = curHp - incomingDmg;
+
                     if (nextHp <= 0) {
+                      // Bear Lv 50 Juggernaut Colossus cheat-death
+                      const bearPet = stateRef.current.pets.find((p) => p.id === 'pet_bear');
+                      if (equipped.includes('pet_bear') && (bearPet?.level || 1) >= 50 && !bearCheatDeathUsed) {
+                        bearCheatDeathUsed = true;
+                        playerPhysics.invulnTimer = 3.5;
+                        soundEngine.playBossRoar();
+                        stateRef.current.onShowMessage('🐻 JUGGERNAUT COLOSSUS! Withstood lethal hit with 3.5s Invulnerability!');
+                        return { ...prev, health: 1 };
+                      }
+
+                      // Slime Lv 50 Mitosis cheat-death
+                      const slimePet = stateRef.current.pets.find((p) => p.id === 'pet_slime');
+                      if (equipped.includes('pet_slime') && (slimePet?.level || 1) >= 50 && !slimeCheatDeathUsed) {
+                        slimeCheatDeathUsed = true;
+                        playerPhysics.invulnTimer = 2.0;
+                        soundEngine.playArcaneBurst();
+                        particleSys.spawnArcaneNova(playerPhysics.pos, 5.0);
+                        stateRef.current.onShowMessage('🧪 MITOSIS REVIVAL! Boba divided and restored 35% HP!');
+                        return { ...prev, health: Math.round((prev.maxHealth || 100) * 0.35) };
+                      }
+
                       // Player defeat!
                       instanceActive = false;
                       soundEngine.playDefeat();
@@ -1238,16 +2090,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                         essenceEarned: waveClearedSummary.essenceEarned,
                         goldEarned: waveClearedSummary.goldEarned,
                       });
+                      return { ...prev, health: 0 };
                     }
                     return { ...prev, health: nextHp };
                   });
                 }
               }
             }
-
-            // Health bar billboard faces camera
-            const hb = enemy.mesh.children.find((c) => c !== enemy.mesh.children[0]);
-            if (hb) hb.rotation.y = camYaw;
           }
 
           // Check if all enemies in current wave are defeated
@@ -1494,6 +2343,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       dom.removeEventListener('touchmove', handleTouchMove);
       dom.removeEventListener('touchend', handleTouchEnd);
       dom.removeEventListener('touchcancel', handleTouchEnd);
+      dom.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+
+      activeCyclones.forEach((cyc) => {
+        scene.remove(cyc.mesh);
+      });
 
       particleSys.dispose();
       renderer.dispose();

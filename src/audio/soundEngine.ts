@@ -246,6 +246,135 @@ class SoundEngine {
     osc.stop(now + 0.45);
   }
 
+  public playCyclone() {
+    if (!this.enabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+
+    const now = this.ctx.currentTime;
+    // Layered swirling vortex frequency modulation
+    for (let i = 0; i < 3; i++) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(120 + i * 80, now);
+      osc.frequency.linearRampToValueAtTime(320 + i * 110, now + 0.6);
+      osc.frequency.exponentialRampToValueAtTime(90, now + 1.2);
+
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(500 + i * 200, now);
+      filter.Q.value = 2.5;
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxGain);
+
+      osc.start();
+      osc.stop(now + 1.2);
+    }
+  }
+
+  public playTidalBarrier() {
+    this.playWaterShield();
+  }
+
+  public playPhantomLeap() {
+    this.playSwiftLeap();
+  }
+
+  public playEarthshatter() {
+    this.playGroundSlam();
+    if (!this.enabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(80, now);
+    osc.frequency.exponentialRampToValueAtTime(25, now + 0.5);
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start();
+    osc.stop(now + 0.5);
+  }
+
+  public playArcaneBurst() {
+    if (!this.enabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+
+    // Harmonic chime + low boom
+    [523.25, 659.25, 1046.5, 1318.5].forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+      gain.gain.setValueAtTime(0.2, now + idx * 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.4);
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+      osc.start(now + idx * 0.04);
+      osc.stop(now + idx * 0.04 + 0.4);
+    });
+
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'triangle';
+    sub.frequency.setValueAtTime(180, now);
+    sub.frequency.exponentialRampToValueAtTime(45, now + 0.35);
+    subGain.gain.setValueAtTime(0.3, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start();
+    sub.stop(now + 0.35);
+  }
+
+  public playCritHit() {
+    if (!this.enabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1400, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.15);
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start();
+    osc.stop(now + 0.15);
+  }
+
+  public playShieldAbsorb() {
+    if (!this.enabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(500, now);
+    osc.frequency.exponentialRampToValueAtTime(250, now + 0.18);
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start();
+    osc.stop(now + 0.18);
+  }
+
   public playGroundSlam() {
     if (!this.enabled) return;
     this.initCtx();

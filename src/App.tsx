@@ -15,6 +15,7 @@ import { DuplicateNotificationModal } from './components/DuplicateNotificationMo
 import { PetData, FarmPlotState, PlayerStats, EssenceShopItem } from './types/game';
 import { INITIAL_PETS, INITIAL_FARM_PLOTS, INITIAL_INVENTORY, DUPLICATE_ESSENCE_VALUES, CROPS } from './game/constants';
 import { soundEngine } from './audio/soundEngine';
+import { computeActiveSkillStats } from './game/combatSkills';
 
 const SAVE_KEY = 'pet_haven_saved_game_v2';
 
@@ -78,15 +79,15 @@ export default function App() {
               return {
                 ...init,
                 ...savedPet,
+                species: init.species,
+                color: init.color,
                 activeSkill: {
-                  ...init.activeSkill,
                   ...savedPet.activeSkill,
-                  levelBonusDescription: init.activeSkill?.levelBonusDescription,
+                  ...init.activeSkill,
                 },
                 passiveSkill: {
-                  ...init.passiveSkill,
                   ...savedPet.passiveSkill,
-                  levelBonusDescription: init.passiveSkill?.levelBonusDescription,
+                  ...init.passiveSkill,
                 },
               };
             }
@@ -272,7 +273,8 @@ export default function App() {
         return;
       }
 
-      const calculatedCd = pet.activeSkill.cooldown * Math.max(0.5, 1 - pet.level * 0.03);
+      const skillStats = computeActiveSkillStats(pet.id, pet.level);
+      const calculatedCd = skillStats.cooldown;
 
       setSkillCooldowns((prev) => ({
         ...prev,

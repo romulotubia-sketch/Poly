@@ -17,6 +17,7 @@ export interface PetData {
   species: 'fox' | 'turtle' | 'rabbit' | 'owl' | 'bear' | 'slime' | 'wolf' | 'frog' | 'deer' | 'dragon' | 'phoenix';
   name: string;
   nickname?: string;
+  role?: string;
   description: string;
   rarity: PetRarity;
   level: number;
