@@ -28,6 +28,7 @@ import {
   createPetBed,
   createPlayBall,
   createSanctuaryArchway,
+  createPetDenBuilding,
   PlayerMeshGroup,
   PetMeshGroup,
 } from './proceduralModels';
@@ -105,6 +106,8 @@ interface PetCombatAIState {
   targetEvalTimer: number;
   attackCooldownTimer: number;
   attackAnimTimer: number;
+  attackTotalDuration: number;
+  hasDealtDamage: boolean;
   isAttacking: boolean;
 }
 
@@ -641,20 +644,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     seedStall.rotation.y = -Math.PI / 4;
     farmEnvironmentGroup.add(seedStall);
 
-    // --- PET DEN ENTRANCE ARCHWAY ON FARM ---
-    const farmPetDenArch = createSanctuaryArchway('To Pet Sanctuary');
-    farmPetDenArch.position.set(12, 0, -10);
-    farmPetDenArch.rotation.y = -Math.PI / 4;
-    farmEnvironmentGroup.add(farmPetDenArch);
+    // --- PROMINENT 3D PET DEN (SANCTUARY) ON FARM ---
+    const petDenBuilding = createPetDenBuilding();
+    petDenBuilding.position.set(13.5, 0, 0);
+    petDenBuilding.rotation.y = -Math.PI / 2;
+    farmEnvironmentGroup.add(petDenBuilding);
 
-    // Welcoming flagstone stepping path leading up to Pet Sanctuary archway
-    for (let s = 0; s < 5; s++) {
+    // Welcoming flagstone stepping path connecting the farm square to the Pet Den porch
+    for (let s = 0; s <= 7; s++) {
       const stone = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.55 - s * 0.04, 0.58 - s * 0.04, 0.04, 7),
-        new THREE.MeshStandardMaterial({ color: 0x9e9e9e, roughness: 0.9 })
+        new THREE.CylinderGeometry(0.62 - s * 0.02, 0.68 - s * 0.02, 0.04, 8),
+        new THREE.MeshStandardMaterial({ color: 0xddb892, roughness: 0.95 })
       );
-      stone.position.set(12 - s * 1.1, 0.02, -10 + s * 1.1);
-      stone.rotation.y = s * 0.8;
+      stone.position.set(5.5 + s * 0.9, 0.02, 0 + Math.sin(s * 0.7) * 0.2);
+      stone.rotation.y = s * 0.6;
       stone.receiveShadow = true;
       farmEnvironmentGroup.add(stone);
     }
@@ -2452,7 +2455,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           instanceEnvironmentGroup.visible = false;
           petDenEnvironmentGroup.visible = false;
           if (prevLoc === 'pet_den') {
-            playerPhysics.pos.set(11, 0, -8); // outside Sanctuary archway on farm
+            playerPhysics.pos.set(10.2, 0, 0); // outside Pet Den porch steps on farm
+            playerPhysics.rotY = -Math.PI / 2;
           } else {
             playerPhysics.pos.set(-11, 0, -8); // outside Wild portal on farm
           }
@@ -3013,6 +3017,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 targetEvalTimer: Math.random() * 0.2,
                 attackCooldownTimer: 0.2 + Math.random() * 0.6,
                 attackAnimTimer: 0,
+                attackTotalDuration: 0.48,
+                hasDealtDamage: false,
                 isAttacking: false,
               };
               petCombatAIMap.set(pet.id, petCombatAi);
@@ -3125,55 +3131,88 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 petSpeed = 0;
                 distToTarget = distToEnemy;
 
-                // Attack timing and damage calculation
-                petCombatAi.attackCooldownTimer -= delta;
-                if (petCombatAi.attackCooldownTimer <= 0) {
-                  const attackInterval = isRanged ? 1.4 : 1.15;
-                  petCombatAi.attackCooldownTimer = attackInterval;
-                  petCombatAi.attackAnimTimer = 0.32;
-                  petCombatAi.isAttacking = true;
+                // Attack animation lifecycle and damage timing
+                if (!petCombatAi.isAttacking) {
+                  petCombatAi.attackCooldownTimer -= delta;
+                  if (petCombatAi.attackCooldownTimer <= 0) {
+                    let duration = 0.48;
+                    if (pet.species === 'bear') duration = 0.58;
+                    else if (pet.species === 'turtle') duration = 0.54;
+                    else if (pet.species === 'rabbit') duration = 0.44;
+                    else if (pet.species === 'owl' || pet.species === 'dragon') duration = 0.50;
+                    else if (pet.species === 'slime') duration = 0.48;
 
-                  // Level-based basic attack damage formula
-                  const baseDmg = 28 + (pet.level || 1) * 3.8;
-                  const tomatoBonus = (stateRef.current.player.nourishment?.attackDamagePct || 0) / 100;
-                  let finalDmg = Math.round(baseDmg * (1 + tomatoBonus));
-                  if (petTarget.armorRuptureTimer > 0) finalDmg = Math.round(finalDmg * 1.35);
+                    petCombatAi.isAttacking = true;
+                    petCombatAi.attackTotalDuration = duration;
+                    petCombatAi.attackAnimTimer = duration;
+                    petCombatAi.hasDealtDamage = false;
+                  }
+                } else {
+                  petCombatAi.attackAnimTimer -= delta;
+                  const progress = THREE.MathUtils.clamp(
+                    1.0 - petCombatAi.attackAnimTimer / petCombatAi.attackTotalDuration,
+                    0,
+                    1
+                  );
 
-                  // Apply basic attack damage
-                  petTarget.health -= finalDmg;
-                  petTarget.hitFlashTimer = 0.14;
-                  const hpPct = Math.max(0, petTarget.health / petTarget.maxHealth);
-                  petTarget.healthBarForeground.scale.x = hpPct;
+                  // Strike impact occurs at 38% progress
+                  if (progress >= 0.38 && !petCombatAi.hasDealtDamage) {
+                    petCombatAi.hasDealtDamage = true;
 
-                  // Species-specific visual hit effect, floating damage number, and sound
-                  particleSys.spawnPetBasicAttackHit(petTarget.mesh.position, pet.species);
-                  particleSys.spawnDamageNumber(petTarget.mesh.position, finalDmg, false, petTarget.isBoss, 'pet');
-                  soundEngine.playPetBasicAttack(pet.species);
+                    // Level-based basic attack damage formula
+                    const baseDmg = 28 + (pet.level || 1) * 3.8;
+                    const tomatoBonus = (stateRef.current.player.nourishment?.attackDamagePct || 0) / 100;
+                    let finalDmg = Math.round(baseDmg * (1 + tomatoBonus));
+                    if (petTarget.armorRuptureTimer > 0) finalDmg = Math.round(finalDmg * 1.35);
 
-                  // Enemy defeat check
-                  if (petTarget.health <= 0) {
-                    particleSys.spawnEnemyDefeat(petTarget.mesh.position);
-                    soundEngine.playEnemyDefeat();
-                    enemiesGroup.remove(petTarget.mesh);
-                    const eIdx = activeEnemies.indexOf(petTarget);
-                    if (eIdx >= 0) activeEnemies.splice(eIdx, 1);
+                    // Apply basic attack damage
+                    petTarget.health -= finalDmg;
+                    petTarget.hitFlashTimer = 0.14;
+                    const hpPct = Math.max(0, petTarget.health / petTarget.maxHealth);
+                    petTarget.healthBarForeground.scale.x = hpPct;
 
-                    const waveConfig = INSTANCE_WAVES[currentWaveIndex] || INSTANCE_WAVES[0];
-                    const rewardPiece = Math.max(1, Math.round(waveConfig.essenceReward / waveConfig.enemyCount));
-                    waveClearedSummary.essenceEarned += rewardPiece;
-                    stateRef.current.onUpdatePlayer((prev) => ({
-                      ...prev,
-                      petEssence: (prev.petEssence || 0) + rewardPiece,
-                    }));
-                    stateRef.current.onWaveInfoChange({
-                      wave: currentWaveIndex + 1,
-                      title: waveConfig.title,
-                      enemiesRemaining: activeEnemies.length,
-                      prepCountdown: prepCountdownTimer,
-                    });
+                    // Species-specific visual hit effect, projectile/arc, floating damage number, and sound
+                    if (isRanged) {
+                      particleSys.spawnPetAttackProjectile(mesh.position, petTarget.mesh.position, pet.species);
+                    } else {
+                      particleSys.spawnPetAttackArc(mesh.position, _vec3A, pet.species);
+                    }
+                    particleSys.spawnPetBasicAttackHit(petTarget.mesh.position, pet.species);
+                    particleSys.spawnDamageNumber(petTarget.mesh.position, finalDmg, false, petTarget.isBoss, 'pet');
+                    soundEngine.playPetBasicAttack(pet.species);
 
-                    petCombatAi.currentTargetId = null;
-                    petTarget = null;
+                    // Enemy defeat check
+                    if (petTarget.health <= 0) {
+                      particleSys.spawnEnemyDefeat(petTarget.mesh.position);
+                      soundEngine.playEnemyDefeat();
+                      enemiesGroup.remove(petTarget.mesh);
+                      const eIdx = activeEnemies.indexOf(petTarget);
+                      if (eIdx >= 0) activeEnemies.splice(eIdx, 1);
+
+                      const waveConfig = INSTANCE_WAVES[currentWaveIndex] || INSTANCE_WAVES[0];
+                      const rewardPiece = Math.max(1, Math.round(waveConfig.essenceReward / waveConfig.enemyCount));
+                      waveClearedSummary.essenceEarned += rewardPiece;
+                      stateRef.current.onUpdatePlayer((prev) => ({
+                        ...prev,
+                        petEssence: (prev.petEssence || 0) + rewardPiece,
+                      }));
+                      stateRef.current.onWaveInfoChange({
+                        wave: currentWaveIndex + 1,
+                        title: waveConfig.title,
+                        enemiesRemaining: activeEnemies.length,
+                        prepCountdown: prepCountdownTimer,
+                      });
+
+                      petCombatAi.currentTargetId = null;
+                      petTarget = null;
+                    }
+                  }
+
+                  // Attack animation completed
+                  if (petCombatAi.attackAnimTimer <= 0) {
+                    petCombatAi.isAttacking = false;
+                    const attackInterval = isRanged ? 1.3 : 1.05;
+                    petCombatAi.attackCooldownTimer = attackInterval + Math.random() * 0.2;
                   }
                 }
               }
@@ -3193,14 +3232,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               petVel = followResult.velocity;
               petSpeed = followResult.speed;
               distToTarget = followResult.distToTarget;
-            }
-
-            // Decrement attack animation timer
-            if (petCombatAi.attackAnimTimer > 0) {
-              petCombatAi.attackAnimTimer -= delta;
-              if (petCombatAi.attackAnimTimer <= 0) {
-                petCombatAi.isAttacking = false;
-              }
             }
           } else {
             // Normal formation following outside of active combat or during prep countdown
@@ -3314,9 +3345,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 isVictory: isPlayerVictory,
                 isDefeat: isPlayerDefeat,
                 animTime: mesh.userData.animTime,
-                slotIndex: overallIdx,
                 isBasicAttacking: petAiState?.isAttacking || false,
                 basicAttackTimer: petAiState?.attackAnimTimer || 0,
+                basicAttackTotalDuration: petAiState?.attackTotalDuration || 0.48,
+                basicAttackPhase: (petAiState?.attackAnimTimer || 0) > (petAiState?.attackTotalDuration || 0.48) * 0.65
+                  ? 'windup'
+                  : (petAiState?.attackAnimTimer || 0) > (petAiState?.attackTotalDuration || 0.48) * 0.32
+                  ? 'strike'
+                  : 'recovery',
                 combatState: petAiState?.state || 'FOLLOW_PLAYER',
               },
               delta
@@ -3786,12 +3822,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           wasNearPortal = false;
         }
 
-        // 2. Check Pet Den Entrance Archway (12, 0, -10)
+        // 2. Check Pet Den Sanctuary Building (13.5, 0, 0)
         if (!prompt) {
-          const distToPetDen = Math.hypot(12 - pPos.x, -10 - pPos.z);
-          if (distToPetDen < 3.4) {
+          const distToPetDen = Math.hypot(13.5 - pPos.x, 0 - pPos.z);
+          if (distToPetDen < 4.8) {
             prompt = {
-              text: 'Enter Pet Sanctuary (Pet Den)',
+              text: '🏡 Enter Pet Den (Sanctuary)',
               action: () => stateRef.current.onEnterPetDen?.(),
             };
           }

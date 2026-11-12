@@ -366,11 +366,14 @@ export const HUD: React.FC<HUDProps> = ({
             {currentLocation === 'farm' && onEnterPetDen && (
               <button
                 onClick={onEnterPetDen}
-                className="bg-teal-800/85 active:bg-teal-700 text-teal-100 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-teal-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
-                title="Enter Pet Sanctuary"
+                className="bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 active:scale-95 text-teal-100 font-bold text-xs px-3 py-1.5 rounded-xl border border-teal-400/50 shadow-md flex items-center gap-1.5 transition-all cursor-pointer ring-1 ring-teal-400/30"
+                title="Enter Pet Den Sanctuary"
               >
                 <span>🏡</span>
                 <span>Pet Den</span>
+                <span className="bg-teal-950/70 text-teal-300 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold">
+                  {pets.filter((p) => p.unlocked).length}
+                </span>
               </button>
             )}
 
@@ -378,10 +381,10 @@ export const HUD: React.FC<HUDProps> = ({
             {currentLocation === 'pet_den' && onLeavePetDen && (
               <button
                 onClick={onLeavePetDen}
-                className="bg-emerald-800 active:bg-emerald-700 text-white font-bold text-xs px-2.5 py-1.5 rounded-xl border border-emerald-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                className="bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-400/50 shadow-md flex items-center gap-1.5 transition-all cursor-pointer ring-1 ring-emerald-400/30"
                 title="Return to Farm"
               >
-                <span>🌾 Farm</span>
+                <span>🌾 Return to Farm</span>
               </button>
             )}
 

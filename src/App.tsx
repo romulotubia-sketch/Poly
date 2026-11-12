@@ -723,29 +723,49 @@ export default function App() {
     [pets, showMessage]
   );
 
-  // Toggle Following from Interaction Modal
+  // Ensure pets.isFollowing always strictly matches player.equippedSkillSlots
+  useEffect(() => {
+    const equippedSet = new Set(player.equippedSkillSlots.filter(Boolean) as string[]);
+    setPets((prev) => {
+      let changed = false;
+      const next = prev.map((p) => {
+        const shouldFollow = equippedSet.has(p.id);
+        if (p.isFollowing !== shouldFollow) {
+          changed = true;
+          return { ...p, isFollowing: shouldFollow };
+        }
+        return p;
+      });
+      return changed ? next : prev;
+    });
+  }, [player.equippedSkillSlots]);
+
+  // Toggle Following from Interaction Modal (synchronizes equipped skill slots)
   const handleToggleFollowFromInteraction = useCallback(
     (petId: string) => {
       const pet = pets.find((p) => p.id === petId);
       if (!pet) return;
 
-      const followingCount = pets.filter((p) => p.isFollowing).length;
-      if (!pet.isFollowing && followingCount >= 5) {
-        showMessage('You can have at most 5 following companions active at once!');
-        return;
+      const isEquipped = player.equippedSkillSlots.includes(petId);
+      let nextSlots = [...player.equippedSkillSlots];
+
+      if (isEquipped) {
+        nextSlots = nextSlots.map((id) => (id === petId ? null : id));
+        showMessage(`${pet.name} returned to resting at the Pet Den.`);
+      } else {
+        const emptyIdx = nextSlots.indexOf(null);
+        if (emptyIdx !== -1) {
+          nextSlots[emptyIdx] = petId;
+        } else {
+          nextSlots[nextSlots.length - 1] = petId;
+        }
+        showMessage(`${pet.name} is now equipped and following you!`);
       }
 
-      setPets((prev) =>
-        prev.map((p) => (p.id === petId ? { ...p, isFollowing: !p.isFollowing } : p))
-      );
+      setPlayer((prev) => ({ ...prev, equippedSkillSlots: nextSlots }));
       soundEngine.playBuySuccess();
-      showMessage(
-        !pet.isFollowing
-          ? `${pet.name} is now adventuring at your side!`
-          : `${pet.name} is resting happily in the sanctuary.`
-      );
     },
-    [pets, showMessage]
+    [pets, player.equippedSkillSlots, showMessage]
   );
 
   // Instance Victory Handler
@@ -932,6 +952,7 @@ export default function App() {
           onUpdatePets={setPets}
           onUpdatePlayer={setPlayer}
           onShowMessage={showMessage}
+          onEnterPetDen={handleEnterPetDen}
         />
       )}
 

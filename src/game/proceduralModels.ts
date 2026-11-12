@@ -1965,4 +1965,186 @@ export function createSanctuaryArchway(title: string): THREE.Group {
   return arch;
 }
 
+// ==========================================
+// PROMINENT PET DEN (SANCTUARY) BUILDING
+// ==========================================
+export function createPetDenBuilding(): THREE.Group {
+  const building = new THREE.Group();
+  building.name = 'pet_den_building';
+
+  const woodWallMat = new THREE.MeshStandardMaterial({ color: 0x855835, roughness: 0.85 });
+  const woodDarkMat = new THREE.MeshStandardMaterial({ color: 0x54361c, roughness: 0.9 });
+  const stoneBaseMat = new THREE.MeshStandardMaterial({ color: 0x78716c, roughness: 0.95 });
+  const roofShingleMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.8 }); // Forest green shingles
+  const roofTrimMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.75 });
+  const goldSignMat = new THREE.MeshStandardMaterial({ color: 0xffedd5, roughness: 0.7 });
+  const warmGlowMat = new THREE.MeshBasicMaterial({ color: 0xffbe53 });
+  const lanternMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+
+  // 1. Mossy Cobblestone Base / Foundation
+  const base = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.45, 5.4), stoneBaseMat);
+  base.position.set(0, 0.22, 0);
+  base.castShadow = true;
+  base.receiveShadow = true;
+  building.add(base);
+
+  // 2. Timber Log Walls
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(5.8, 2.9, 4.8), woodWallMat);
+  walls.position.set(0, 1.85, 0);
+  walls.castShadow = true;
+  walls.receiveShadow = true;
+  building.add(walls);
+
+  // 3. Welcoming Porch Deck (extending forward along +Z)
+  const porch = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.35, 2.0), woodDarkMat);
+  porch.position.set(0, 0.2, 2.8);
+  porch.receiveShadow = true;
+  building.add(porch);
+
+  // Porch Steps
+  const step = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 0.8), stoneBaseMat);
+  step.position.set(0, 0.09, 4.0);
+  step.receiveShadow = true;
+  building.add(step);
+
+  // 4. Porch Pillars
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x6f4e37, roughness: 0.85 });
+  const pillarL = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 2.6, 8), pillarMat);
+  pillarL.position.set(-2.2, 1.4, 3.6);
+  pillarL.castShadow = true;
+  const pillarR = pillarL.clone();
+  pillarR.position.set(2.2, 1.4, 3.6);
+  building.add(pillarL, pillarR);
+
+  // Hanging Porch Lanterns
+  const lanternL = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), lanternMat);
+  lanternL.position.set(-2.2, 2.3, 3.6);
+  const lanternR = lanternL.clone();
+  lanternR.position.set(2.2, 2.3, 3.6);
+  building.add(lanternL, lanternR);
+
+  // Porch Overhang Roof
+  const porchRoof = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.2, 1.8), roofShingleMat);
+  porchRoof.position.set(0, 2.75, 2.9);
+  porchRoof.rotation.x = 0.18;
+  porchRoof.castShadow = true;
+  building.add(porchRoof);
+
+  // 5. Main Gabled Roof
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(4.6, 2.5, 4), roofShingleMat);
+  roof.position.set(0, 4.3, 0);
+  roof.rotation.y = Math.PI / 4;
+  roof.scale.set(1.15, 1, 0.95);
+  roof.castShadow = true;
+  building.add(roof);
+
+  // Roof Crest Trim
+  const roofCrest = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 5.2), roofTrimMat);
+  roofCrest.position.set(0, 5.2, 0);
+  building.add(roofCrest);
+
+  // 6. Arched Doorway with Warm Interior Glow
+  const doorCutout = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.1, 0.2), new THREE.MeshBasicMaterial({ color: 0x24150c }));
+  doorCutout.position.set(0, 1.25, 2.42);
+  building.add(doorCutout);
+
+  const doorGlow = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.8, 0.1), warmGlowMat);
+  doorGlow.position.set(0, 1.15, 2.45);
+  building.add(doorGlow);
+
+  // Warm interior PointLight
+  const interiorLight = new THREE.PointLight(0xffbe53, 1.6, 7.5);
+  interiorLight.position.set(0, 1.6, 2.8);
+  building.add(interiorLight);
+
+  // 7. Large Carved Wooden Signboard: "🐾 PET DEN"
+  const signBoard = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.7, 0.15), goldSignMat);
+  signBoard.position.set(0, 2.5, 2.5);
+  signBoard.castShadow = true;
+  building.add(signBoard);
+
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 128;
+  const sCtx = signCanvas.getContext('2d');
+  if (sCtx) {
+    sCtx.fillStyle = '#fef3c7';
+    sCtx.fillRect(0, 0, 512, 128);
+    sCtx.lineWidth = 8;
+    sCtx.strokeStyle = '#78350f';
+    sCtx.strokeRect(6, 6, 500, 116);
+    sCtx.fillStyle = '#78350f';
+    sCtx.font = 'bold 54px sans-serif';
+    sCtx.textAlign = 'center';
+    sCtx.textBaseline = 'middle';
+    sCtx.fillText('🐾  PET DEN  🐾', 256, 64);
+  }
+  const signTexture = new THREE.CanvasTexture(signCanvas);
+  const signMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.7, 0.65),
+    new THREE.MeshBasicMaterial({ map: signTexture, transparent: true })
+  );
+  signMesh.position.set(0, 2.5, 2.58);
+  building.add(signMesh);
+
+  // 8. Stone Chimney on the side
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.2, 0.8), stoneBaseMat);
+  chimney.position.set(2.2, 4.2, -0.8);
+  chimney.castShadow = true;
+  building.add(chimney);
+
+  // 9. Floating 3D Beacon Billboard (visible clearly from across the whole farm)
+  const beaconCanvas = document.createElement('canvas');
+  beaconCanvas.width = 384;
+  beaconCanvas.height = 128;
+  const bCtx = beaconCanvas.getContext('2d');
+  if (bCtx) {
+    bCtx.fillStyle = 'rgba(13, 148, 136, 0.95)';
+    bCtx.beginPath();
+    bCtx.roundRect(8, 8, 368, 112, 28);
+    bCtx.fill();
+    bCtx.lineWidth = 6;
+    bCtx.strokeStyle = '#5eead4';
+    bCtx.stroke();
+    bCtx.fillStyle = '#ffffff';
+    bCtx.font = 'bold 44px sans-serif';
+    bCtx.textAlign = 'center';
+    bCtx.textBaseline = 'middle';
+    bCtx.fillText('🏡 PET DEN', 192, 48);
+    bCtx.fillStyle = '#99f6e4';
+    bCtx.font = 'bold 24px sans-serif';
+    bCtx.fillText('🐾 Pet Sanctuary', 192, 88);
+  }
+  const beaconTexture = new THREE.CanvasTexture(beaconCanvas);
+  const beaconSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: beaconTexture, transparent: true, depthTest: false }));
+  beaconSprite.scale.set(3.4, 1.15, 1);
+  beaconSprite.position.set(0, 6.2, 0);
+  building.add(beaconSprite);
+
+  // 10. Porch Props: Miniature Doghouse, Food Bowl, Water Bowl, Pet Cushion
+  const miniHouse = createPetHouse();
+  miniHouse.scale.set(0.65, 0.65, 0.65);
+  miniHouse.position.set(-1.8, 0.38, 2.8);
+  miniHouse.rotation.y = Math.PI / 4;
+  building.add(miniHouse);
+
+  const petBed = createPetBed();
+  petBed.scale.set(0.8, 0.8, 0.8);
+  petBed.position.set(1.7, 0.38, 2.7);
+  building.add(petBed);
+
+  const foodB = createFoodBowl();
+  foodB.scale.set(0.85, 0.85, 0.85);
+  foodB.position.set(1.2, 0.38, 3.4);
+  building.add(foodB);
+
+  const waterB = createWaterBowl();
+  waterB.scale.set(0.85, 0.85, 0.85);
+  waterB.position.set(1.7, 0.38, 3.4);
+  building.add(waterB);
+
+  return building;
+}
+
+
 

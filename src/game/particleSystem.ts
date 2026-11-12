@@ -15,6 +15,7 @@ interface Particle {
   orbitRadius?: number;
   orbitAngle?: number;
   isHarvestFly?: boolean;
+  isProjectile?: boolean;
   startPos?: THREE.Vector3;
   targetPos?: THREE.Vector3;
   poolType: ParticleMeshType;
@@ -585,6 +586,71 @@ export class ParticleSystem {
     }
   }
 
+  // --- RANGED PET ATTACK ELEMENTAL PROJECTILE ---
+  public spawnPetAttackProjectile(startPos: THREE.Vector3, targetPos: THREE.Vector3, species: string) {
+    let projColor = 0x38bdf8;
+    switch (species) {
+      case 'fox': projColor = 0xf97316; break;
+      case 'owl': projColor = 0x2dd4bf; break;
+      case 'dragon': projColor = 0xef4444; break;
+      case 'phoenix': projColor = 0xfacc15; break;
+      case 'slime': projColor = 0xa855f7; break;
+      default: projColor = 0x60a5fa; break;
+    }
+    const mat = new THREE.MeshBasicMaterial({ color: projColor });
+    const count = this.getAdjustedCount(3);
+    for (let i = 0; i < count; i++) {
+      const mesh = this.acquireMesh('spark', mat);
+      mesh.position.copy(startPos);
+      mesh.position.y += 0.35;
+      mesh.scale.set(1.4, 1.4, 1.4);
+
+      this.addParticle({
+        mesh,
+        velocity: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0.18 + i * 0.04,
+        isProjectile: true,
+        startPos: new THREE.Vector3(startPos.x, startPos.y + 0.35, startPos.z),
+        targetPos: new THREE.Vector3(targetPos.x, targetPos.y + 0.45, targetPos.z),
+        scaleDelta: 0.3,
+        poolType: 'spark',
+      });
+    }
+  }
+
+  // --- MELEE PET ATTACK IMPACT ARC / SLASH TRAIL ---
+  public spawnPetAttackArc(origin: THREE.Vector3, dir: THREE.Vector3, species: string) {
+    let arcColor = 0xffffff;
+    switch (species) {
+      case 'bear': arcColor = 0xd97706; break;
+      case 'turtle': arcColor = 0x38bdf8; break;
+      case 'rabbit': arcColor = 0xfef08a; break;
+      default: arcColor = 0xe0e7ff; break;
+    }
+    const mat = new THREE.MeshBasicMaterial({ color: arcColor });
+    const count = this.getAdjustedCount(6);
+    for (let i = 0; i < count; i++) {
+      const mesh = this.acquireMesh('spark', mat);
+      mesh.position.copy(origin);
+      mesh.position.y += 0.35 + (Math.random() - 0.5) * 0.2;
+      const angleOffset = (i - (count - 1) / 2) * 0.32;
+      const cos = Math.cos(angleOffset);
+      const sin = Math.sin(angleOffset);
+      const vx = (dir.x * cos - dir.z * sin) * 5.2;
+      const vz = (dir.x * sin + dir.z * cos) * 5.2;
+
+      this.addParticle({
+        mesh,
+        velocity: new THREE.Vector3(vx, 1.2 + Math.random() * 1.4, vz),
+        life: 0,
+        maxLife: 0.22,
+        scaleDelta: -0.75,
+        poolType: 'spark',
+      });
+    }
+  }
+
   // --- REUSABLE CANVAS SPRITE POOL FOR FLOATING DAMAGE TEXTS (ZERO MEMORY LEAKS) ---
   public spawnDamageNumber(
     position: THREE.Vector3,
@@ -986,8 +1052,12 @@ export class ParticleSystem {
         continue;
       }
 
-      // Parabolic flight arc for harvested item collection
-      if (p.isHarvestFly && p.startPos && p.targetPos) {
+      // Direct projectile flight or parabolic harvest fly
+      if (p.isProjectile && p.startPos && p.targetPos) {
+        const progress = Math.min(1.0, p.life / p.maxLife);
+        p.mesh.position.lerpVectors(p.startPos, p.targetPos, progress);
+        p.mesh.position.y += Math.sin(progress * Math.PI) * 0.35;
+      } else if (p.isHarvestFly && p.startPos && p.targetPos) {
         const progress = p.life / p.maxLife;
         p.mesh.position.x = THREE.MathUtils.lerp(p.startPos.x, p.targetPos.x, progress);
         p.mesh.position.z = THREE.MathUtils.lerp(p.startPos.z, p.targetPos.z, progress);

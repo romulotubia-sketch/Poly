@@ -25,6 +25,7 @@ interface PetModalProps {
   onUpdatePets: (updater: (prev: PetData[]) => PetData[]) => void;
   onUpdatePlayer: (updater: (prev: PlayerStats) => PlayerStats) => void;
   onShowMessage: (msg: string) => void;
+  onEnterPetDen?: () => void;
 }
 
 export const PetModal: React.FC<PetModalProps> = ({
@@ -34,43 +35,65 @@ export const PetModal: React.FC<PetModalProps> = ({
   onUpdatePets,
   onUpdatePlayer,
   onShowMessage,
+  onEnterPetDen,
 }) => {
   const [selectedPetId, setSelectedPetId] = useState<string>(pets[0]?.id || 'pet_fox');
   const selectedPet = pets.find((p) => p.id === selectedPetId) || pets[0];
 
-  // Helper to equip a pet into a specific slot (0-4)
+  // Helper to equip a pet into a specific slot (0-4) and automatically synchronize following squad
   const handleEquipSlot = (slotIndex: number, petId: string) => {
-    onUpdatePlayer((prev) => {
-      const newSlots = [...prev.equippedSkillSlots];
-      // If pet already equipped in another slot, remove it first to prevent duplicates
-      const existingIdx = newSlots.indexOf(petId);
-      if (existingIdx !== -1) {
-        newSlots[existingIdx] = null;
-      }
-      // If clicking same slot that already has this pet, toggle unequip
-      if (newSlots[slotIndex] === petId) {
-        newSlots[slotIndex] = null;
-        onShowMessage(`Unequipped ${selectedPet.name}'s active & passive skills.`);
-      } else {
-        newSlots[slotIndex] = petId;
-        onShowMessage(`Equipped ${selectedPet.name}'s skills to Slot ${slotIndex + 1}!`);
-      }
-      return { ...prev, equippedSkillSlots: newSlots };
-    });
+    const newSlots = [...player.equippedSkillSlots];
+    const existingIdx = newSlots.indexOf(petId);
+    if (existingIdx !== -1 && existingIdx !== slotIndex) {
+      newSlots[existingIdx] = null;
+    }
+
+    if (newSlots[slotIndex] === petId) {
+      newSlots[slotIndex] = null;
+      onShowMessage(`Unequipped ${selectedPet.name} from Slot ${slotIndex + 1}.`);
+    } else {
+      newSlots[slotIndex] = petId;
+      onShowMessage(`Equipped ${selectedPet.name} to Slot ${slotIndex + 1}! Now following you!`);
+    }
+
+    onUpdatePlayer((prev) => ({ ...prev, equippedSkillSlots: newSlots }));
+    const equippedIds = new Set(newSlots.filter(Boolean) as string[]);
+    onUpdatePets((prev) =>
+      prev.map((p) => ({
+        ...p,
+        isFollowing: equippedIds.has(p.id),
+      }))
+    );
     soundEngine.playHarvest();
   };
 
+  // Toggle follow status: automatically equips or unequips the pet in the squad
   const handleToggleFollow = (petId: string) => {
+    const isCurrentlyEquipped = player.equippedSkillSlots.includes(petId);
+    let newSlots = [...player.equippedSkillSlots];
+
+    if (isCurrentlyEquipped) {
+      // Unequip from all slots
+      newSlots = newSlots.map((id) => (id === petId ? null : id));
+      onShowMessage(`${selectedPet.name} returned to resting at the Pet Den.`);
+    } else {
+      // Equip into first open slot, or slot 4 if full
+      const emptyIdx = newSlots.indexOf(null);
+      if (emptyIdx !== -1) {
+        newSlots[emptyIdx] = petId;
+      } else {
+        newSlots[newSlots.length - 1] = petId;
+      }
+      onShowMessage(`${selectedPet.name} is now equipped and following you!`);
+    }
+
+    onUpdatePlayer((prev) => ({ ...prev, equippedSkillSlots: newSlots }));
+    const equippedIds = new Set(newSlots.filter(Boolean) as string[]);
     onUpdatePets((prev) =>
-      prev.map((p) => {
-        if (p.id === petId) {
-          const nextState = !p.isFollowing;
-          onShowMessage(nextState ? `${p.name} is now following you!` : `${p.name} returned to resting at habitat.`);
-          return { ...p, isFollowing: nextState };
-        }
-        // Only one pet follows at a time for optimal gameplay
-        return { ...p, isFollowing: false };
-      })
+      prev.map((p) => ({
+        ...p,
+        isFollowing: equippedIds.has(p.id),
+      }))
     );
     soundEngine.playPetJoy();
   };
@@ -494,15 +517,31 @@ export const PetModal: React.FC<PetModalProps> = ({
               <button
                 onClick={() => handleToggleFollow(selectedPet.id)}
                 className={`font-semibold text-xs py-2.5 px-3 rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
-                  selectedPet.isFollowing
-                    ? 'bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 border-emerald-500/50'
+                  player.equippedSkillSlots.includes(selectedPet.id)
+                    ? 'bg-emerald-850 hover:bg-emerald-800 text-emerald-200 border-emerald-500/60 ring-1 ring-emerald-500/30'
                     : 'bg-stone-800 hover:bg-stone-700 text-stone-200 border-stone-600/50'
                 }`}
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{selectedPet.isFollowing ? 'Rest at Home' : 'Follow Me'}</span>
+                <span>
+                  {player.equippedSkillSlots.includes(selectedPet.id) ? 'Rest at Den' : 'Equip & Follow'}
+                </span>
               </button>
             </div>
+
+            {/* Direct Shortcut to 3D Pet Den Sanctuary */}
+            {onEnterPetDen && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onEnterPetDen();
+                }}
+                className="w-full mt-3 bg-gradient-to-r from-teal-800 to-emerald-800 hover:from-teal-700 hover:to-emerald-700 active:scale-98 text-teal-100 font-bold text-xs py-2.5 px-4 rounded-xl border border-teal-500/40 shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer ring-1 ring-teal-400/20"
+              >
+                <span>🏡</span>
+                <span>Visit Pet Den Sanctuary (Watch all pets play & roam)</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

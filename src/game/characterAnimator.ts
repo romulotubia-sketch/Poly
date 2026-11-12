@@ -68,6 +68,7 @@ export interface PetAnimContext {
   slotIndex: number;
   isBasicAttacking?: boolean;
   basicAttackTimer?: number;
+  basicAttackTotalDuration?: number;
   basicAttackPhase?: 'windup' | 'strike' | 'recovery';
   combatState?: string;
 }
@@ -90,6 +91,7 @@ export const FARM_OBSTACLES: FarmObstacle[] = [
   { x: 23, z: -8, radius: 2.6, name: 'quarry_1' },
   { x: 25, z: 4, radius: 2.6, name: 'quarry_2' },
   { x: -11, z: -2, radius: 2.2, name: 'fox_den' },
+  { x: 13.5, z: 0, radius: 3.4, name: 'pet_den' },
 ];
 
 /**
@@ -485,17 +487,63 @@ export class PetAnimator {
       }
     }
 
-    // Basic Attack: Quick forward bite/paw swipe
-    if (ctx.isBasicAttacking) {
-      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
-      mesh.position.y = 0.08 + Math.abs(strikeProgress) * 0.12;
-      if (head) head.rotation.x = -0.3 + strikeProgress * 0.45;
-      if (tail) tail.rotation.y = Math.sin(anim * 26) * 0.6;
-      if (legs && legs.length >= 4) {
-        legs[0].rotation.x = -0.7 * strikeProgress;
-        legs[1].rotation.x = 0.7 * strikeProgress;
-        legs[2].rotation.x = 0.3;
-        legs[3].rotation.x = 0.3;
+    // Basic Attack: 3-Phase Predator Pounce & Dual Paw Slash
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const totalDur = ctx.basicAttackTotalDuration || 0.48;
+      const rem = ctx.basicAttackTimer || 0;
+      const progress = THREE.MathUtils.clamp(1.0 - rem / totalDur, 0, 1);
+
+      if (progress < 0.35) {
+        // Phase 1: Windup (Stalking crouch, coiled legs, tail vibrating high)
+        const sub = progress / 0.35;
+        mesh.position.y = -0.07 * sub;
+        mesh.scale.set(1.15, 0.88, 1.1);
+        if (head) {
+          head.rotation.x = -0.32 * sub;
+          head.position.z = -0.06 * sub;
+        }
+        if (tail) {
+          tail.rotation.x = 0.65 * sub;
+          tail.rotation.y = Math.sin(anim * 35) * 0.45 * sub;
+        }
+        if (legs && legs.length >= 4) {
+          legs[0].rotation.x = 0.6 * sub;
+          legs[1].rotation.x = 0.6 * sub;
+          legs[2].rotation.x = -0.4 * sub;
+          legs[3].rotation.x = -0.4 * sub;
+        }
+      } else if (progress < 0.68) {
+        // Phase 2: Explosive Forward Pounce & Snappy Claw Slash
+        const sub = (progress - 0.35) / 0.33;
+        const strikeCurve = Math.sin(sub * Math.PI);
+        mesh.position.y = 0.05 + strikeCurve * 0.28;
+        mesh.scale.set(0.85, 0.92, 1.35);
+        if (head) {
+          head.rotation.x = 0.38 * strikeCurve;
+          head.position.z = 0.16 * strikeCurve;
+        }
+        if (tail) {
+          tail.rotation.x = -0.45;
+          tail.rotation.y = 0;
+        }
+        if (legs && legs.length >= 4) {
+          legs[1].rotation.x = THREE.MathUtils.lerp(-1.4, 0.5, sub); // Front right claw swipe
+          legs[1].rotation.z = -0.4 * strikeCurve;
+          legs[0].rotation.x = THREE.MathUtils.lerp(0.4, -0.9, sub); // Front left follow-through
+          legs[2].rotation.x = 0.7;
+          legs[3].rotation.x = 0.7;
+        }
+      } else {
+        // Phase 3: Land on all fours with springy elastic recoil
+        const sub = (progress - 0.68) / 0.32;
+        const settle = Math.sin(sub * Math.PI) * (1 - sub);
+        mesh.position.y = -0.04 * settle;
+        mesh.scale.set(1.0 + settle * 0.12, 1.0 - settle * 0.12, 1.0);
+        if (tail) {
+          tail.rotation.y = Math.sin(sub * Math.PI * 4) * 0.35 * (1 - sub);
+          tail.rotation.x = -0.1;
+        }
+        if (head) head.rotation.x = -0.1 * settle;
       }
       return;
     }
@@ -606,12 +654,51 @@ export class PetAnimator {
       }
     }
 
-    // Basic Attack: Short-range head/shell thrust strike
-    if (ctx.isBasicAttacking) {
-      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
-      if (head) head.position.z = 0.42 + strikeProgress * 0.25;
-      if (body) body.rotation.x = strikeProgress * 0.2;
-      mesh.scale.set(1.1, 0.95, 1.15);
+    // Basic Attack: 3-Phase Shell Shock Thrust & Head-Snap Strike
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const totalDur = ctx.basicAttackTotalDuration || 0.54;
+      const rem = ctx.basicAttackTimer || 0;
+      const progress = THREE.MathUtils.clamp(1.0 - rem / totalDur, 0, 1);
+
+      if (progress < 0.35) {
+        // Phase 1: Windup (Retracts head into shell, shell cocks back)
+        const sub = progress / 0.35;
+        if (body) body.rotation.x = -0.32 * sub;
+        mesh.position.y = 0.04 * sub;
+        if (head) {
+          head.position.z = THREE.MathUtils.lerp(0.42, 0.16, sub);
+          head.scale.set(0.82, 0.82, 0.82);
+        }
+        if (legs && legs.length >= 4) {
+          legs[0].rotation.x = 0.55 * sub;
+          legs[1].rotation.x = 0.55 * sub;
+        }
+        mesh.scale.set(1.15, 0.88, 1.15);
+      } else if (progress < 0.68) {
+        // Phase 2: Explosive Forward Piston Head Thrust & Shell Lunge
+        const sub = (progress - 0.35) / 0.33;
+        const strikeCurve = Math.sin(sub * Math.PI);
+        if (body) body.rotation.x = THREE.MathUtils.lerp(-0.32, 0.42, sub);
+        if (head) {
+          head.position.z = 0.42 + strikeCurve * 0.45;
+          head.scale.set(1.22, 1.22, 1.38);
+        }
+        if (legs && legs.length >= 4) {
+          legs[0].rotation.x = THREE.MathUtils.lerp(0.55, -0.95, sub);
+          legs[1].rotation.x = THREE.MathUtils.lerp(0.55, -0.95, sub);
+        }
+        mesh.scale.set(0.9, 1.05, 1.32);
+      } else {
+        // Phase 3: Heavy Ground Slam Rebound & Head Stabilize
+        const sub = (progress - 0.68) / 0.32;
+        const settle = Math.sin(sub * Math.PI) * (1 - sub);
+        if (body) body.rotation.x = 0.15 * settle;
+        if (head) {
+          head.position.z = 0.42 + 0.08 * settle;
+          head.scale.set(1, 1, 1);
+        }
+        mesh.scale.set(1.0 + settle * 0.1, 1.0 - settle * 0.08, 1.0);
+      }
       return;
     }
 
@@ -689,19 +776,54 @@ export class PetAnimator {
       }
     }
 
-    // Basic Attack: Quick hop forward into double kick strike
-    if (ctx.isBasicAttacking) {
-      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
-      mesh.position.y = Math.abs(strikeProgress) * 0.28;
-      if (ears) {
-        ears[0].rotation.x = -0.5 * strikeProgress;
-        ears[1].rotation.x = -0.5 * strikeProgress;
-      }
-      if (legs && legs.length >= 4) {
-        legs[0].rotation.x = -0.8 * strikeProgress;
-        legs[1].rotation.x = -0.8 * strikeProgress;
-        legs[2].rotation.x = 0.8 * strikeProgress;
-        legs[3].rotation.x = 0.8 * strikeProgress;
+    // Basic Attack: 3-Phase Acrobatic Spring Hop & Double Dropkick
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const totalDur = ctx.basicAttackTotalDuration || 0.44;
+      const rem = ctx.basicAttackTimer || 0;
+      const progress = THREE.MathUtils.clamp(1.0 - rem / totalDur, 0, 1);
+
+      if (progress < 0.35) {
+        // Phase 1: Windup (Coils down like a spring, ears pinned, tail wiggling)
+        const sub = progress / 0.35;
+        mesh.position.y = -0.1 * sub;
+        mesh.scale.set(1.26, 0.68, 1.26);
+        if (ears) {
+          ears[0].rotation.x = -1.15 * sub;
+          ears[1].rotation.x = -1.15 * sub;
+        }
+        if (legs && legs.length >= 4) {
+          legs[2].rotation.x = 0.95 * sub;
+          legs[3].rotation.x = 0.95 * sub;
+        }
+      } else if (progress < 0.68) {
+        // Phase 2: Flying Somersault Dropkick Leap
+        const sub = (progress - 0.35) / 0.33;
+        const kickCurve = Math.sin(sub * Math.PI);
+        mesh.position.y = 0.12 + kickCurve * 0.48;
+        mesh.rotation.x = -0.55 * kickCurve;
+        if (legs && legs.length >= 4) {
+          legs[2].rotation.x = -1.55 * kickCurve;
+          legs[3].rotation.x = -1.55 * kickCurve;
+          legs[0].rotation.x = 0.9 * kickCurve;
+          legs[1].rotation.x = 0.9 * kickCurve;
+        }
+        if (ears) {
+          ears[0].rotation.x = -0.95;
+          ears[1].rotation.x = -0.95;
+        }
+        mesh.scale.set(0.8, 1.35, 1.18);
+      } else {
+        // Phase 3: Springy Landing with Ear Flop
+        const sub = (progress - 0.68) / 0.32;
+        const bounce = Math.abs(Math.sin(sub * Math.PI * 2)) * (1 - sub);
+        mesh.position.y = bounce * 0.16;
+        mesh.rotation.x = 0;
+        if (ears) {
+          const earFlop = Math.sin(sub * Math.PI * 2) * 0.5 * (1 - sub);
+          ears[0].rotation.x = earFlop;
+          ears[1].rotation.x = earFlop;
+        }
+        mesh.scale.set(1.0 + bounce * 0.15, 1.0 - bounce * 0.12, 1.0);
       }
       return;
     }
@@ -789,15 +911,61 @@ export class PetAnimator {
       return;
     }
 
-    // Basic Attack: Aerodynamic wing dive & beak peck
-    if (ctx.isBasicAttacking) {
-      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
-      mesh.position.y = baseHoverY + strikeProgress * 0.18;
-      if (wings && wings.length >= 2) {
-        wings[0].rotation.z = -0.3 - strikeProgress * 0.9;
-        wings[1].rotation.z = 0.3 + strikeProgress * 0.9;
+    // Basic Attack: 3-Phase Aerial Talon Dive & Sonic Wing Buffet
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const totalDur = ctx.basicAttackTotalDuration || 0.50;
+      const rem = ctx.basicAttackTimer || 0;
+      const progress = THREE.MathUtils.clamp(1.0 - rem / totalDur, 0, 1);
+
+      if (progress < 0.35) {
+        // Phase 1: Windup (Ascends high in hover, wings flare wide, beak locks on)
+        const sub = progress / 0.35;
+        mesh.position.y = baseHoverY + 0.36 * sub;
+        if (wings && wings.length >= 2) {
+          wings[0].rotation.z = -0.4 - 1.15 * sub;
+          wings[1].rotation.z = 0.4 + 1.15 * sub;
+          wings[0].rotation.x = -0.35 * sub;
+          wings[1].rotation.x = -0.35 * sub;
+        }
+        if (head) head.rotation.x = 0.45 * sub;
+        if (ud.legs && ud.legs.length >= 2) {
+          ud.legs[0].rotation.x = 0.7 * sub;
+          ud.legs[1].rotation.x = 0.7 * sub;
+        }
+      } else if (progress < 0.68) {
+        // Phase 2: Talon Dive & Sonic Wing Buffet
+        const sub = (progress - 0.35) / 0.33;
+        const diveCurve = Math.sin(sub * Math.PI);
+        mesh.position.y = baseHoverY - 0.24 * diveCurve;
+        mesh.rotation.x = 0.55 * diveCurve;
+        if (wings && wings.length >= 2) {
+          wings[0].rotation.z = THREE.MathUtils.lerp(-1.5, 0.85, sub);
+          wings[1].rotation.z = THREE.MathUtils.lerp(1.5, -0.85, sub);
+          wings[0].rotation.y = 0.55 * diveCurve;
+          wings[1].rotation.y = -0.55 * diveCurve;
+        }
+        if (ud.legs && ud.legs.length >= 2) {
+          ud.legs[0].rotation.x = -1.25 * diveCurve;
+          ud.legs[1].rotation.x = -1.25 * diveCurve;
+        }
+        if (head) {
+          head.rotation.x = 0.65 * diveCurve;
+          head.position.z = 0.22 * diveCurve;
+        }
+      } else {
+        // Phase 3: Swoop back into stable hover
+        const sub = (progress - 0.68) / 0.32;
+        const glide = (1 - sub);
+        mesh.position.y = baseHoverY + Math.sin(sub * Math.PI) * 0.12;
+        mesh.rotation.x = 0.25 * glide;
+        const flap = Math.sin(sub * Math.PI * 3) * 0.45 * glide;
+        if (wings && wings.length >= 2) {
+          wings[0].rotation.z = -0.3 - flap;
+          wings[1].rotation.z = 0.3 + flap;
+          wings[0].rotation.y = 0;
+          wings[1].rotation.y = 0;
+        }
       }
-      if (head) head.rotation.x = strikeProgress * 0.4;
       return;
     }
 
@@ -883,14 +1051,52 @@ export class PetAnimator {
       }
     }
 
-    // Basic Attack: Heavy paw strike slamming down
-    if (ctx.isBasicAttacking) {
-      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
-      mesh.position.y = Math.abs(strikeProgress) * 0.12;
-      if (body) body.rotation.y = strikeProgress * 0.3;
-      if (legs && legs.length >= 4) {
-        legs[0].rotation.x = -1.2 * strikeProgress;
-        legs[1].rotation.x = 0.4;
+    // Basic Attack: 3-Phase Titanic Bear Swat & Ground Stomp
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const totalDur = ctx.basicAttackTotalDuration || 0.58;
+      const rem = ctx.basicAttackTimer || 0;
+      const progress = THREE.MathUtils.clamp(1.0 - rem / totalDur, 0, 1);
+
+      if (progress < 0.35) {
+        // Phase 1: Windup (Rears up onto mighty hind legs, raises right arm like a war hammer)
+        const sub = progress / 0.35;
+        if (body) body.rotation.x = -0.55 * sub;
+        mesh.position.y = 0.26 * sub;
+        if (legs && legs.length >= 4) {
+          legs[1].rotation.x = -1.75 * sub;
+          legs[1].rotation.z = 0.5 * sub;
+          legs[0].rotation.x = 0.35 * sub;
+        }
+        if (head) {
+          head.rotation.x = -0.5 * sub;
+          head.position.y = 0.85 + 0.18 * sub;
+        }
+      } else if (progress < 0.68) {
+        // Phase 2: Brutal Sledgehammer Paw Slam & Impact Squash
+        const sub = (progress - 0.35) / 0.33;
+        const slamCurve = Math.sin(sub * Math.PI);
+        mesh.position.y = THREE.MathUtils.lerp(0.26, 0.0, sub);
+        if (body) {
+          body.rotation.x = THREE.MathUtils.lerp(-0.55, 0.28, sub);
+          body.rotation.y = 0.42 * slamCurve;
+        }
+        if (legs && legs.length >= 4) {
+          legs[1].rotation.x = THREE.MathUtils.lerp(-1.75, 1.45, sub);
+          legs[1].rotation.z = -0.4 * slamCurve;
+          legs[0].rotation.x = 0.3;
+        }
+        if (head) head.rotation.x = 0.45 * slamCurve;
+        mesh.scale.set(1.24, 0.78, 1.2);
+      } else {
+        // Phase 3: Heavy shoulder heave settling
+        const sub = (progress - 0.68) / 0.32;
+        const settle = Math.sin(sub * Math.PI) * (1 - sub);
+        if (body) {
+          body.rotation.z = Math.sin(sub * Math.PI * 2) * 0.12 * settle;
+          body.rotation.x = 0.1 * settle;
+          body.rotation.y = 0;
+        }
+        mesh.scale.set(1.0 + settle * 0.12, 1.0 - settle * 0.1, 1.0);
       }
       return;
     }
@@ -960,15 +1166,42 @@ export class PetAnimator {
       }
     }
 
-    // Basic Attack: Cartoon body bounce slam
-    if (ctx.isBasicAttacking) {
-      const strikeProgress = Math.sin((ctx.basicAttackTimer || 0.2) * Math.PI * 4);
-      if (strikeProgress > 0) {
-        mesh.position.y = strikeProgress * 0.3;
-        mesh.scale.set(0.85, 1.25, 0.85);
+    // Basic Attack: 3-Phase Gelatinous Catapult Body Slam & Goo Spit
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const totalDur = ctx.basicAttackTotalDuration || 0.48;
+      const rem = ctx.basicAttackTimer || 0;
+      const progress = THREE.MathUtils.clamp(1.0 - rem / totalDur, 0, 1);
+
+      if (progress < 0.35) {
+        // Phase 1: Windup (Extreme pancake squash, storing hydraulic tension)
+        const sub = progress / 0.35;
+        mesh.scale.set(1.55, 0.45, 1.55);
+        mesh.position.y = -0.06 * sub;
+        if (droplet) {
+          droplet.position.z = -0.45 * sub;
+          droplet.position.y = 0.35;
+          droplet.scale.set(1.3, 1.3, 1.3);
+        }
+      } else if (progress < 0.68) {
+        // Phase 2: Catapult Body Slam Forward & Bullet Droplet Shot
+        const sub = (progress - 0.35) / 0.33;
+        const boingCurve = Math.sin(sub * Math.PI);
+        mesh.position.y = 0.38 * boingCurve;
+        mesh.scale.set(0.62, 0.62, 1.75);
+        if (droplet) {
+          droplet.position.z = 0.65 * boingCurve;
+          droplet.scale.set(1.2, 1.2, 1.6);
+        }
       } else {
+        // Phase 3: Rubbery Jelly Wobble Rebound
+        const sub = (progress - 0.68) / 0.32;
+        const wobble = Math.sin(sub * Math.PI * 4) * Math.exp(-sub * 3.5);
+        mesh.scale.set(1.0 + wobble * 0.45, 1.0 - wobble * 0.45, 1.0 + wobble * 0.45);
         mesh.position.y = 0;
-        mesh.scale.set(1.3, 0.7, 1.3);
+        if (droplet) {
+          droplet.position.z = THREE.MathUtils.lerp(0.15, 0, sub);
+          droplet.scale.set(1, 1, 1);
+        }
       }
       return;
     }
