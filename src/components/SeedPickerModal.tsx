@@ -1,6 +1,16 @@
 import React from 'react';
 import { X, Clock, Coins, Sparkles, Store } from 'lucide-react';
-import { CROPS } from '../game/constants';
+import { CROPS, NOURISHMENT_CONFIGS } from '../game/constants';
+import { PetRarity } from '../types/game';
+
+const RARITY_BADGE_STYLE: Record<PetRarity, string> = {
+  Common: 'bg-stone-800 text-stone-300 border-stone-600/60',
+  Uncommon: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50',
+  Rare: 'bg-sky-950/80 text-sky-300 border-sky-500/50',
+  Epic: 'bg-purple-950/80 text-purple-300 border-purple-500/50',
+  Legendary: 'bg-amber-950/80 text-amber-300 border-amber-500/60',
+  Mythical: 'bg-rose-950/80 text-rose-300 border-rose-500/60',
+};
 
 interface SeedPickerModalProps {
   plotId: number;
@@ -63,6 +73,7 @@ export const SeedPickerModal: React.FC<SeedPickerModalProps> = ({
           ) : (
             availableSeeds.map((cropId) => {
               const crop = CROPS[cropId];
+              const nourish = NOURISHMENT_CONFIGS[cropId];
               const count = inventory[`seed_${cropId}`] || 0;
 
               return (
@@ -76,25 +87,37 @@ export const SeedPickerModal: React.FC<SeedPickerModalProps> = ({
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-inner border border-white/10"
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-inner border border-white/10 shrink-0"
                       style={{ backgroundColor: `${crop.color}33` }}
                     >
-                      {cropId === 'carrot' ? '🥕' : cropId === 'tomato' ? '🍅' : cropId === 'strawberry' ? '🍓' : cropId === 'corn' ? '🌽' : '🎃'}
+                      {crop.emoji}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <h4 className="font-bold text-xs text-stone-100">{crop.name}</h4>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                            RARITY_BADGE_STYLE[crop.rarity]
+                          }`}
+                        >
+                          {crop.rarity}
+                        </span>
                         <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800/40">
                           x{count}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-stone-400">
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-stone-400">
                         <span className="flex items-center gap-0.5 text-sky-300">
                           <Clock className="w-2.5 h-2.5" /> {crop.growTimeSeconds}s
                         </span>
                         <span className="flex items-center gap-0.5 text-amber-300">
                           <Coins className="w-2.5 h-2.5" /> Harvest: {crop.sellPrice}g
                         </span>
+                        {nourish && (
+                          <span className="text-purple-300">
+                            +{nourish.bonusPerCrop}{nourish.unit} {nourish.statName}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

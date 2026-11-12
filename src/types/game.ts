@@ -24,9 +24,99 @@ export interface PetSkill {
   levelBonusDescription?: (level: number) => string;
 }
 
+export type PetTrainingCategory =
+  | 'vitality'
+  | 'attack'
+  | 'speed'
+  | 'defense'
+  | 'agility'
+  | 'precision'
+  | 'critical'
+  | 'range'
+  | 'active_skill'
+  | 'passive_skill';
+
+export interface PetTrainingLevels {
+  vitality: number;
+  attack: number;
+  speed: number;
+  defense: number;
+  agility: number;
+  precision: number;
+  critical: number;
+  range: number;
+  active_skill: number;
+  passive_skill: number;
+}
+
+export interface PetBaseStats {
+  maxHp: number;
+  attackDamage: number;
+  attackSpeed: number; // attacks per second
+  attackRange: number; // meters
+  moveSpeed: number; // m/s
+  defense: number; // defense rating
+  critChance: number; // 0 to 1
+  critDamage: number; // multiplier e.g. 1.55 = 155%
+}
+
+export interface PetCalculatedStats extends PetBaseStats {
+  base: PetBaseStats;
+  levelBonus: PetBaseStats;
+  trainingBonus: PetBaseStats;
+  attackInterval: number; // 1 / attackSpeed
+  damageReductionPct: number; // 0 to 0.72
+  totalEssenceInvested: number;
+}
+
+export interface PetUpgradeHistoryEntry {
+  id: string;
+  petId: string;
+  petName: string;
+  species: string;
+  category: PetTrainingCategory;
+  categoryLabel: string;
+  previousLevel: number;
+  newLevel: number;
+  essenceSpent: number;
+  timestamp: number;
+}
+
+export interface PetCombatRuntimeStatus {
+  petId: string;
+  name: string;
+  species: string;
+  color: string;
+  currentHp: number;
+  maxHp: number;
+  defeated: boolean;
+  slotIndex: number;
+}
+
 export interface PetData {
   id: string;
-  species: 'fox' | 'turtle' | 'rabbit' | 'owl' | 'bear' | 'slime' | 'wolf' | 'frog' | 'deer' | 'dragon' | 'phoenix';
+  species:
+    | 'fox'
+    | 'turtle'
+    | 'rabbit'
+    | 'owl'
+    | 'bear'
+    | 'slime'
+    | 'wolf'
+    | 'frog'
+    | 'deer'
+    | 'dragon'
+    | 'phoenix'
+    | 'red_panda'
+    | 'timber_wolf'
+    | 'sylvan_deer'
+    | 'penguin'
+    | 'bat'
+    | 'poison_frog'
+    | 'hedgehog'
+    | 'bee'
+    | 'dragon_whelp'
+    | 'capybara';
   name: string;
   nickname?: string;
   role?: string;
@@ -43,16 +133,24 @@ export interface PetData {
   color: string;
   accentColor: string;
   unlocked: boolean;
+  baseStats?: PetBaseStats;
+  training?: PetTrainingLevels;
+  currentHp?: number;
+  maxHp?: number;
+  defeated?: boolean;
+  upgradeHistory?: PetUpgradeHistoryEntry[];
 }
 
 export interface CropDefinition {
   id: string;
   name: string;
+  rarity: PetRarity;
   growTimeSeconds: number;
   seedPrice: number;
   sellPrice: number;
   expReward: number;
   icon: string;
+  emoji: string;
   color: string;
   stageColors: [string, string, string]; // sprout, growing, mature
   description: string;
@@ -88,11 +186,14 @@ export interface NourishmentBonuses {
   strawberriesConsumed: number;
   cornConsumed: number;
   pumpkinsConsumed: number;
-  maxHpBonus: number;        // up to +100 Max HP (+0.1 per carrot)
-  attackDamagePct: number;   // up to +20% (+0.1% per tomato)
-  critChancePct: number;     // up to +10% (+0.1% per strawberry)
-  moveSpeedPct: number;      // up to +10% (+0.1% per corn)
-  defensePct: number;        // up to +20% (+0.1% per pumpkin)
+  consumedCounts?: Record<string, number>;
+  maxHpBonus: number;        // up to +100 Max HP
+  attackDamagePct: number;   // up to +20%
+  critChancePct: number;     // up to +10%
+  moveSpeedPct: number;      // up to +10%
+  defensePct: number;        // up to +20%
+  critDamagePct?: number;    // up to +40%
+  skillDamagePct?: number;   // up to +25%
 }
 
 export interface PlayerStats {
@@ -170,3 +271,78 @@ export interface GameSaveState {
   inventory: Record<string, number>;
   unlockedDecors: string[];
 }
+
+export type MissionPeriod = 'daily' | 'weekly';
+export type MissionCategory = 'farming' | 'pet' | 'wild_grounds' | 'general';
+export type MissionDifficulty = 'easy' | 'medium' | 'hard';
+
+export type MissionEventType =
+  | 'harvest_crop'
+  | 'plant_seed'
+  | 'earn_farm_coins'
+  | 'earn_coins'
+  | 'feed_pet'
+  | 'interact_pet'
+  | 'visit_pet_den'
+  | 'gain_pet_exp'
+  | 'defeat_enemy'
+  | 'defeat_elite'
+  | 'defeat_boss'
+  | 'complete_wave'
+  | 'complete_instance'
+  | 'play_time_minute'
+  | 'complete_daily_mission'
+  | 'complete_mission';
+
+export interface MissionSeedReward {
+  seedKey: string;
+  name: string;
+  count: number;
+  icon: string;
+}
+
+export interface MissionReward {
+  gold?: number;
+  petEssence?: number;
+  seeds?: MissionSeedReward[];
+}
+
+export interface MissionInstance {
+  id: string;
+  templateId: string;
+  period: MissionPeriod;
+  category: MissionCategory;
+  difficulty: MissionDifficulty;
+  title: string;
+  description: string;
+  eventType: MissionEventType;
+  uniqueTrackKey?: boolean;
+  trackedKeys?: string[];
+  target: number;
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+  reward: MissionReward;
+}
+
+export interface MilestoneState {
+  id: string;
+  period: MissionPeriod;
+  requiredCount: number;
+  title: string;
+  reward: MissionReward;
+  claimed: boolean;
+}
+
+export interface MissionBoardState {
+  version: number;
+  dailyMissions: MissionInstance[];
+  weeklyMissions: MissionInstance[];
+  dailyMilestones: MilestoneState[];
+  weeklyMilestones: MilestoneState[];
+  lastDailyResetKey: string;
+  lastWeeklyResetKey: string;
+  lastDailyResetAt: number;
+  lastWeeklyResetAt: number;
+}
+

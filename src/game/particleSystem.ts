@@ -567,6 +567,16 @@ export class ParticleSystem {
       case 'deer': hitColor = 0x4ade80; break;
       case 'dragon': hitColor = 0xef4444; break;
       case 'phoenix': hitColor = 0xfacc15; break;
+      case 'red_panda': hitColor = 0x52b788; break;
+      case 'timber_wolf': hitColor = 0xd97706; break;
+      case 'sylvan_deer': hitColor = 0x70e000; break;
+      case 'penguin': hitColor = 0x38bdf8; break;
+      case 'bat': hitColor = 0xc084fc; break;
+      case 'poison_frog': hitColor = 0x84cc16; break;
+      case 'hedgehog': hitColor = 0xd6d3d1; break;
+      case 'bee': hitColor = 0xfbbf24; break;
+      case 'dragon_whelp': hitColor = 0xf97316; break;
+      case 'capybara': hitColor = 0xfdba74; break;
     }
     const count = this.getAdjustedCount(7);
     const mat = new THREE.MeshBasicMaterial({ color: hitColor });
@@ -595,6 +605,9 @@ export class ParticleSystem {
       case 'dragon': projColor = 0xef4444; break;
       case 'phoenix': projColor = 0xfacc15; break;
       case 'slime': projColor = 0xa855f7; break;
+      case 'bat': projColor = 0xc084fc; break;
+      case 'bee': projColor = 0xfbbf24; break;
+      case 'dragon_whelp': projColor = 0xff5400; break;
       default: projColor = 0x60a5fa; break;
     }
     const mat = new THREE.MeshBasicMaterial({ color: projColor });
@@ -626,6 +639,13 @@ export class ParticleSystem {
       case 'bear': arcColor = 0xd97706; break;
       case 'turtle': arcColor = 0x38bdf8; break;
       case 'rabbit': arcColor = 0xfef08a; break;
+      case 'red_panda': arcColor = 0xfb923c; break;
+      case 'timber_wolf': arcColor = 0xfde68a; break;
+      case 'sylvan_deer': arcColor = 0x86efac; break;
+      case 'penguin': arcColor = 0x7dd3fc; break;
+      case 'poison_frog': arcColor = 0xa3e635; break;
+      case 'hedgehog': arcColor = 0xf5d0fe; break;
+      case 'capybara': arcColor = 0xfdba74; break;
       default: arcColor = 0xe0e7ff; break;
     }
     const mat = new THREE.MeshBasicMaterial({ color: arcColor });

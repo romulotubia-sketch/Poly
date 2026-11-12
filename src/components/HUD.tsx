@@ -22,6 +22,9 @@ import {
   Maximize,
   Minimize,
   EyeOff,
+  ClipboardCheck,
+  Shield,
+  Zap,
 } from 'lucide-react';
 import { PetData, PlayerStats, GraphicsQuality, PerformanceStatsData } from '../types/game';
 
@@ -59,6 +62,9 @@ interface HUDProps {
   onToggleAutoHunt?: () => void;
   playerTargetInfo?: { id: string; name: string; hpRatio: number; maxHealth?: number; health?: number } | null;
   petsEngagedCount?: number;
+  onOpenMissions?: () => void;
+  unclaimedMissionCount?: number;
+  missionToast?: string | null;
 }
 
 const SKILL_ICONS: Record<string, React.FC<{ className?: string }>> = {
@@ -74,6 +80,8 @@ const SKILL_ICONS: Record<string, React.FC<{ className?: string }>> = {
   Eye,
   Dumbbell,
   HeartPulse,
+  Shield,
+  Zap,
 };
 
 export const HUD: React.FC<HUDProps> = ({
@@ -110,14 +118,20 @@ export const HUD: React.FC<HUDProps> = ({
   onToggleAutoHunt,
   playerTargetInfo = null,
   petsEngagedCount = 0,
+  onOpenMissions,
+  unclaimedMissionCount = 0,
+  missionToast = null,
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
   // Equipped pet skills in the 5 slots
   const equippedPets = player.equippedSkillSlots.map((id) => (id ? pets.find((p) => p.id === id) || null : null));
 
-  // Find currently following pet
-  const followingPet = pets.find((p) => p.isFollowing) || pets[0];
+  // Find currently following pet (prioritizing equipped slot order)
+  const followingPet =
+    equippedPets.find((p): p is PetData => Boolean(p && p.unlocked)) ||
+    pets.find((p) => p.isFollowing && p.unlocked) ||
+    null;
 
   const maxHealth = player.maxHealth || 100;
   const healthPercent = Math.max(0, Math.min(100, ((player.health ?? maxHealth) / maxHealth) * 100));
@@ -128,7 +142,7 @@ export const HUD: React.FC<HUDProps> = ({
       {showPerfStats && perfStats && !isZenMode && (
         <aside
           aria-label="Performance Monitor"
-          className="pointer-events-auto absolute top-14 right-2 sm:right-4 z-40 bg-stone-950/90 border border-stone-700/80 rounded-xl px-2.5 py-1.5 shadow-2xl backdrop-blur-sm text-[10px] font-mono flex flex-col gap-0.5 text-stone-200 min-w-[130px]"
+          className="pointer-events-auto absolute top-24 sm:top-20 right-2 sm:right-4 z-40 bg-stone-950/90 border border-stone-700/80 rounded-xl px-2.5 py-1.5 shadow-2xl backdrop-blur-sm text-[10px] font-mono flex flex-col gap-0.5 text-stone-200 min-w-[130px]"
         >
           <div className="flex items-center justify-between gap-3 font-bold border-b border-stone-800 pb-0.5">
             <span
@@ -177,7 +191,7 @@ export const HUD: React.FC<HUDProps> = ({
 
       {/* Toast Notification Banner */}
       {messageToast && (
-        <div className="pointer-events-auto absolute top-14 left-1/2 -translate-x-1/2 z-50 px-2 max-w-[90vw]">
+        <div className="pointer-events-auto absolute top-24 sm:top-20 left-1/2 -translate-x-1/2 z-50 px-2 max-w-[92vw]">
           <div className="bg-amber-950/90 text-amber-100 text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg border border-amber-500/50 backdrop-blur-md flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="truncate">{messageToast}</span>
@@ -185,9 +199,23 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
       )}
 
+      {/* Non-interruptive Mission Notification Toast */}
+      {missionToast && !isZenMode && (
+        <div
+          className={`pointer-events-none absolute left-1/2 -translate-x-1/2 z-40 px-2 max-w-[92vw] ${
+            currentLocation === 'wild_grounds' ? 'top-40 sm:top-36' : messageToast ? 'top-32 sm:top-28' : 'top-24 sm:top-20'
+          }`}
+        >
+          <div className="bg-emerald-950/90 text-emerald-100 text-[11px] sm:text-xs font-bold px-3.5 py-1.5 rounded-full shadow-lg border border-emerald-400/50 backdrop-blur-md flex items-center gap-2">
+            <ClipboardCheck className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+            <span className="truncate">{missionToast}</span>
+          </div>
+        </div>
+      )}
+
       {/* Wild Grounds Wave Status Center Banner with Auto Hunt and Target Info */}
       {currentLocation === 'wild_grounds' && !isZenMode && (
-        <div className="pointer-events-auto absolute top-14 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5">
+        <div className="pointer-events-auto absolute top-24 sm:top-20 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 w-[94vw] max-w-md">
           {/* Wave info banner */}
           <div className="bg-stone-950/90 border-2 border-indigo-500/60 rounded-2xl px-3.5 py-1.5 shadow-2xl flex items-center gap-2.5 backdrop-blur-sm">
             <div className="flex items-center gap-1.5 text-indigo-300 font-black text-xs sm:text-sm uppercase tracking-wide">
@@ -195,16 +223,10 @@ export const HUD: React.FC<HUDProps> = ({
               {waveTitle && <span className="text-stone-300 text-xs font-normal">({waveTitle})</span>}
             </div>
             <div className="h-4 w-px bg-stone-700" />
-            {prepCountdown !== null && prepCountdown > 0 ? (
-              <div className="text-amber-400 font-bold text-xs animate-bounce">
-                ⚔️ Spawning in {prepCountdown}s...
-              </div>
-            ) : (
-              <div className="text-rose-400 font-bold text-xs flex items-center gap-1">
-                <span>Enemies:</span>
-                <span className="text-white font-black">{enemiesRemaining}</span>
-              </div>
-            )}
+            <div className="text-rose-400 font-bold text-xs flex items-center gap-1">
+              <span>Enemies:</span>
+              <span className="text-white font-black">{enemiesRemaining}</span>
+            </div>
           </div>
 
           {/* Auto Hunt Toggle Button & Combat Target / Pets Engaged Tracker */}
@@ -244,117 +266,150 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
       )}
 
-      {/* Top Bar for Mobile Landscape */}
+      {/* Top Bar (Portrait-first two-tier responsive HUD) */}
       {!isZenMode && (
-        <header className="pointer-events-auto absolute top-2 inset-x-2 sm:inset-x-4 flex items-center justify-between gap-2 z-30">
-          {/* Left: App Title Badge, Location & Following Pet Pill */}
-          <div className="flex items-center gap-2">
-            <div className="bg-emerald-950/85 border border-emerald-600/40 rounded-xl px-2.5 py-1.5 text-white shadow flex items-center gap-2">
-              <span className="text-sm">
-                {currentLocation === 'wild_grounds' ? '⚔️' : currentLocation === 'pet_den' ? '🏡' : '🐾'}
-              </span>
-              <div>
-                <h1 className="text-[11px] font-black tracking-wide text-emerald-300 leading-tight">
-                  {currentLocation === 'wild_grounds'
-                    ? 'WILD GROUNDS'
-                    : currentLocation === 'pet_den'
-                    ? 'PET SANCTUARY'
-                    : 'PET HAVEN'}
-                </h1>
-                <div className="text-[9px] text-emerald-100/90 flex items-center gap-1.5 font-medium">
-                  <span className="flex items-center gap-0.5">
-                    <Calendar className="w-2.5 h-2.5 text-emerald-400" /> Day {player.day}
-                  </span>
-                  {(currentLocation === 'farm' || currentLocation === 'pet_den') && (
-                    <span
-                      className={`px-1.5 py-0.2 rounded-md font-bold text-[8.5px] border ${
-                        timePhase === 'morning'
-                          ? 'bg-rose-950/80 text-rose-200 border-rose-500/40'
+        <header className="pointer-events-none absolute top-2 inset-x-2 sm:inset-x-4 flex flex-col gap-1.5 z-30">
+          {/* Row 1: Player status on left, currencies & system icons on right */}
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            {/* Left: App Title Badge, Location, HP & Following Pet Pill */}
+            <div className="pointer-events-auto flex items-center gap-1.5 flex-wrap">
+              <div className="bg-emerald-950/85 border border-emerald-600/40 rounded-xl px-2 py-1 text-white shadow flex items-center gap-1.5">
+                <span className="text-xs sm:text-sm">
+                  {currentLocation === 'wild_grounds' ? '⚔️' : currentLocation === 'pet_den' ? '🏡' : '🐾'}
+                </span>
+                <div>
+                  <h1 className="text-[10px] sm:text-[11px] font-black tracking-wide text-emerald-300 leading-tight">
+                    {currentLocation === 'wild_grounds'
+                      ? 'WILD GROUNDS'
+                      : currentLocation === 'pet_den'
+                      ? 'PET DEN'
+                      : 'PET HAVEN'}
+                  </h1>
+                  <div className="text-[8.5px] sm:text-[9px] text-emerald-100/90 flex items-center gap-1 font-medium">
+                    <span className="flex items-center gap-0.5">
+                      <Calendar className="w-2.5 h-2.5 text-emerald-400" /> D{player.day}
+                    </span>
+                    {(currentLocation === 'farm' || currentLocation === 'pet_den') && (
+                      <span
+                        className={`px-1 py-0.2 rounded font-bold text-[8px] border ${
+                          timePhase === 'morning'
+                            ? 'bg-rose-950/80 text-rose-200 border-rose-500/40'
+                            : timePhase === 'sunset'
+                            ? 'bg-amber-950/80 text-amber-200 border-amber-500/40'
+                            : timePhase === 'night'
+                            ? 'bg-indigo-950/90 text-indigo-200 border-indigo-400/50'
+                            : 'bg-sky-950/80 text-sky-200 border-sky-400/40'
+                        }`}
+                      >
+                        {timePhase === 'morning'
+                          ? '🌅'
                           : timePhase === 'sunset'
-                          ? 'bg-amber-950/80 text-amber-200 border-amber-500/40'
+                          ? '🌇'
                           : timePhase === 'night'
-                          ? 'bg-indigo-950/90 text-indigo-200 border-indigo-400/50'
-                          : 'bg-sky-950/80 text-sky-200 border-sky-400/40'
-                      }`}
-                    >
-                      {timePhase === 'morning'
-                        ? '🌅 Morning'
-                        : timePhase === 'sunset'
-                        ? '🌇 Sunset'
-                        : timePhase === 'night'
-                        ? '🌙 Night'
-                        : '☀️ Day'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Player Health Bar */}
-            <div className="bg-stone-900/90 border border-stone-700 rounded-xl px-2.5 py-1 flex items-center gap-2 shadow">
-              <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500 shrink-0" />
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between text-[9px] font-bold text-rose-200">
-                  <span>HP</span>
-                  <span>{player.health ?? maxHealth}/{maxHealth}</span>
-                </div>
-                <div className="w-16 sm:w-20 h-1.5 bg-stone-950 rounded-full overflow-hidden border border-rose-950">
-                  <div
-                    className="h-full bg-gradient-to-r from-rose-600 to-rose-400 transition-all duration-300 rounded-full"
-                    style={{ width: `${healthPercent}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Following Pet Widget */}
-            {followingPet && (
-              <button
-                onClick={onOpenPets}
-                className="flex items-center gap-2 bg-amber-950/80 active:bg-amber-900 border border-amber-600/40 rounded-xl px-2.5 py-1 text-white shadow transition-all cursor-pointer"
-              >
-                <div
-                  className="w-6 h-6 rounded-full border border-amber-300 flex items-center justify-center text-xs font-bold shadow-inner"
-                  style={{ backgroundColor: followingPet.color }}
-                >
-                  {followingPet.name[0]}
-                </div>
-                <div className="text-left leading-none">
-                  <div className="text-[10px] font-bold text-amber-200">{followingPet.name}</div>
-                  <div className="flex items-center gap-1.5 text-[8px] text-amber-100/80 mt-0.5">
-                    <span className="flex items-center gap-0.5 text-rose-300">
-                      <Heart className="w-2 h-2 fill-rose-400 text-rose-400" /> {followingPet.happiness}%
-                    </span>
-                    <span>🍖 {followingPet.hunger}%</span>
+                          ? '🌙'
+                          : '☀️'}
+                      </span>
+                    )}
                   </div>
                 </div>
-              </button>
-            )}
-          </div>
+              </div>
 
-          {/* Right: Currencies & Navigation Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Coins */}
-            <div className="bg-amber-950/85 border border-amber-500/40 rounded-xl px-2.5 py-1 text-amber-300 font-bold text-xs flex items-center gap-1 shadow">
-              <Coins className="w-3.5 h-3.5 text-amber-400" />
-              <span>{player.gold}</span>
+              {/* Player Health Bar */}
+              <div className="bg-stone-900/90 border border-stone-700 rounded-xl px-2 py-1 flex items-center gap-1.5 shadow">
+                <Heart className="w-3 h-3 fill-rose-500 text-rose-500 shrink-0" />
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between gap-1 text-[8.5px] font-bold text-rose-200">
+                    <span>HP</span>
+                    <span>{player.health ?? maxHealth}/{maxHealth}</span>
+                  </div>
+                  <div className="w-12 sm:w-20 h-1.5 bg-stone-950 rounded-full overflow-hidden border border-rose-950">
+                    <div
+                      className="h-full bg-gradient-to-r from-rose-600 to-rose-400 transition-all duration-300 rounded-full"
+                      style={{ width: `${healthPercent}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Following Pet Widget (hidden on ultra-narrow screens if crowded, visible >=xs) */}
+              {followingPet && (
+                <button
+                  onClick={onOpenPets}
+                  className="hidden sm:flex items-center gap-2 bg-amber-950/80 active:bg-amber-900 border border-amber-600/40 rounded-xl px-2.5 py-1 text-white shadow transition-all cursor-pointer"
+                >
+                  <div
+                    className="w-6 h-6 rounded-full border border-amber-300 flex items-center justify-center text-xs font-bold shadow-inner"
+                    style={{ backgroundColor: followingPet.color }}
+                  >
+                    {followingPet.name[0]}
+                  </div>
+                  <div className="text-left leading-none">
+                    <div className="text-[10px] font-bold text-amber-200">{followingPet.name}</div>
+                    <div className="flex items-center gap-1.5 text-[8px] text-amber-100/80 mt-0.5">
+                      <span className="flex items-center gap-0.5 text-rose-300">
+                        <Heart className="w-2 h-2 fill-rose-400 text-rose-400" /> {followingPet.happiness}%
+                      </span>
+                      <span>🍖 {followingPet.hunger}%</span>
+                    </div>
+                  </div>
+                </button>
+              )}
             </div>
 
-            {/* Pet Essence Badge */}
-            <button
-              onClick={onOpenEssenceShop}
-              className="bg-purple-950/85 hover:bg-purple-900/90 border border-purple-500/40 rounded-xl px-2.5 py-1 text-purple-300 font-bold text-xs flex items-center gap-1 shadow cursor-pointer transition-transform active:scale-95"
-              title="Open Essence Sanctuary"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-spin" />
-              <span>{player.petEssence || 0}</span>
-            </button>
+            {/* Right: Currencies & System Controls */}
+            <div className="pointer-events-auto flex items-center gap-1">
+              {/* Coins */}
+              <div className="bg-amber-950/85 border border-amber-500/40 rounded-xl px-2 py-1 text-amber-300 font-bold text-[11px] sm:text-xs flex items-center gap-1 shadow">
+                <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
+                <span>{player.gold}</span>
+              </div>
 
+              {/* Pet Essence Badge */}
+              <button
+                onClick={onOpenEssenceShop}
+                className="bg-purple-950/85 hover:bg-purple-900/90 border border-purple-500/40 rounded-xl px-2 py-1 text-purple-300 font-bold text-[11px] sm:text-xs flex items-center gap-1 shadow cursor-pointer transition-transform active:scale-95"
+                title="Open Essence Sanctuary"
+              >
+                <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-400 animate-spin" />
+                <span>{player.petEssence || 0}</span>
+              </button>
+
+              {/* Fullscreen Toggle Button */}
+              <button
+                onClick={onToggleFullscreen}
+                className="bg-stone-850/80 active:bg-stone-750 text-amber-300 p-1.5 rounded-xl border border-amber-600/40 shadow transition-transform active:scale-95 cursor-pointer"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              >
+                {isFullscreen ? <Minimize className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Maximize className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+              </button>
+
+              {/* Settings */}
+              <button
+                onClick={onOpenSettings}
+                className="bg-stone-850/80 active:bg-stone-750 text-stone-200 p-1.5 rounded-xl border border-stone-600/40 shadow transition-transform active:scale-95 cursor-pointer"
+                title="Settings"
+              >
+                <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </button>
+
+              {/* Zen Mode Button */}
+              <button
+                onClick={onToggleZenMode}
+                className="bg-stone-850/80 active:bg-stone-750 text-teal-300 p-1.5 rounded-xl border border-teal-600/40 shadow transition-transform active:scale-95 cursor-pointer"
+                title="Zen Mode"
+              >
+                <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Row 2: Quick Action Navigation Pills (Compact & Scrollable on Portrait) */}
+          <div className="pointer-events-auto flex items-center justify-end sm:justify-end gap-1.5 overflow-x-auto pb-0.5">
             {/* Fast Seed Shop Button (when on farm) */}
             {currentLocation === 'farm' && onOpenSeedShop && (
               <button
                 onClick={onOpenSeedShop}
-                className="bg-emerald-800/85 active:bg-emerald-700 text-emerald-200 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-emerald-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                className="bg-emerald-800/85 active:bg-emerald-700 text-emerald-200 font-bold text-[11px] sm:text-xs px-2 sm:px-2.5 py-1 rounded-xl border border-emerald-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer shrink-0"
                 title="Barnaby's Seed Shop"
               >
                 <span>🌱</span>
@@ -366,12 +421,12 @@ export const HUD: React.FC<HUDProps> = ({
             {currentLocation === 'farm' && onEnterPetDen && (
               <button
                 onClick={onEnterPetDen}
-                className="bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 active:scale-95 text-teal-100 font-bold text-xs px-3 py-1.5 rounded-xl border border-teal-400/50 shadow-md flex items-center gap-1.5 transition-all cursor-pointer ring-1 ring-teal-400/30"
+                className="bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 active:scale-95 text-teal-100 font-bold text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border border-teal-400/50 shadow-md flex items-center gap-1 transition-all cursor-pointer shrink-0"
                 title="Enter Pet Den Sanctuary"
               >
                 <span>🏡</span>
-                <span>Pet Den</span>
-                <span className="bg-teal-950/70 text-teal-300 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold">
+                <span>Den</span>
+                <span className="bg-teal-950/70 text-teal-300 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold">
                   {pets.filter((p) => p.unlocked).length}
                 </span>
               </button>
@@ -381,10 +436,10 @@ export const HUD: React.FC<HUDProps> = ({
             {currentLocation === 'pet_den' && onLeavePetDen && (
               <button
                 onClick={onLeavePetDen}
-                className="bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-400/50 shadow-md flex items-center gap-1.5 transition-all cursor-pointer ring-1 ring-emerald-400/30"
+                className="bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 active:scale-95 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border border-emerald-400/50 shadow-md flex items-center gap-1 transition-all cursor-pointer shrink-0"
                 title="Return to Farm"
               >
-                <span>🌾 Return to Farm</span>
+                <span>🌾 Farm</span>
               </button>
             )}
 
@@ -392,7 +447,7 @@ export const HUD: React.FC<HUDProps> = ({
             {currentLocation === 'wild_grounds' && onLeaveInstance && (
               <button
                 onClick={onLeaveInstance}
-                className="bg-rose-800 active:bg-rose-700 text-white font-bold text-xs px-2.5 py-1.5 rounded-xl border border-rose-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                className="bg-rose-800 active:bg-rose-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border border-rose-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer shrink-0"
               >
                 <span>🏃 Return</span>
               </button>
@@ -402,7 +457,7 @@ export const HUD: React.FC<HUDProps> = ({
             {onOpenNourishment && (
               <button
                 onClick={onOpenNourishment}
-                className="bg-amber-800/85 active:bg-amber-700 text-amber-100 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-amber-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                className="bg-amber-800/85 active:bg-amber-700 text-amber-100 font-bold text-[11px] sm:text-xs px-2 sm:px-2.5 py-1 rounded-xl border border-amber-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer shrink-0"
                 title="Permanent Character Nourishment"
               >
                 <span>🥗</span>
@@ -413,64 +468,55 @@ export const HUD: React.FC<HUDProps> = ({
             {/* Pets Sanctuary Button */}
             <button
               onClick={onOpenPets}
-              className="bg-emerald-700 active:bg-emerald-600 text-white font-bold text-xs px-2.5 py-1.5 rounded-xl border border-emerald-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+              className="bg-emerald-700 active:bg-emerald-600 text-white font-bold text-[11px] sm:text-xs px-2 sm:px-2.5 py-1 rounded-xl border border-emerald-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer shrink-0"
             >
               <span>🐾</span>
               <span>Pets</span>
             </button>
 
+            {/* Mission Board Button */}
+            {onOpenMissions && (
+              <button
+                onClick={onOpenMissions}
+                className="relative bg-indigo-800/90 hover:bg-indigo-700 active:bg-indigo-600 text-indigo-100 font-bold text-[11px] sm:text-xs px-2 sm:px-2.5 py-1 rounded-xl border border-indigo-400/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer shrink-0"
+                title="Open Daily & Weekly Mission Board"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5 text-indigo-200" />
+                <span>Missions</span>
+                {unclaimedMissionCount > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9.5px] font-black leading-tight shadow">
+                    {unclaimedMissionCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Bag Button */}
             <button
               onClick={onOpenInventory}
-              className="bg-amber-700 active:bg-amber-600 text-white font-bold text-xs px-2.5 py-1.5 rounded-xl border border-amber-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+              className="bg-amber-700 active:bg-amber-600 text-white font-bold text-[11px] sm:text-xs px-2 sm:px-2.5 py-1 rounded-xl border border-amber-500/40 shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer shrink-0"
             >
               <Package className="w-3.5 h-3.5" />
               <span>Bag</span>
-            </button>
-
-            {/* Fullscreen Toggle Button */}
-            <button
-              onClick={onToggleFullscreen}
-              className="bg-stone-850/80 active:bg-stone-750 text-amber-300 p-1.5 rounded-xl border border-amber-600/40 shadow transition-transform active:scale-95 cursor-pointer"
-              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-            >
-              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-            </button>
-
-            {/* Settings */}
-            <button
-              onClick={onOpenSettings}
-              className="bg-stone-850/80 active:bg-stone-750 text-stone-200 p-1.5 rounded-xl border border-stone-600/40 shadow transition-transform active:scale-95 cursor-pointer"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-
-            {/* Zen Mode Button */}
-            <button
-              onClick={onToggleZenMode}
-              className="bg-stone-850/80 active:bg-stone-750 text-teal-300 p-1.5 rounded-xl border border-teal-600/40 shadow transition-transform active:scale-95 cursor-pointer"
-              title="Zen Mode"
-            >
-              <EyeOff className="w-4 h-4" />
             </button>
           </div>
         </header>
       )}
 
-      {/* Floating Near Interactable Prompt Banner (Centered Lower Middle) */}
+      {/* Floating Near Interactable Prompt Banner */}
       {nearInteractable && (
-        <div className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2 z-40">
+        <div className="pointer-events-auto absolute bottom-24 left-3 sm:left-1/2 sm:-translate-x-1/2 z-40 max-w-[65vw]">
           <button
             onClick={nearInteractable.action}
-            className="bg-gradient-to-r from-amber-600 to-amber-500 active:from-amber-700 active:to-amber-600 text-white font-black text-xs sm:text-sm px-5 py-2 rounded-full shadow-2xl border-2 border-amber-200 flex items-center gap-2 active:scale-95 transition-transform cursor-pointer"
+            className="bg-gradient-to-r from-amber-600 to-amber-500 active:from-amber-700 active:to-amber-600 text-white font-black text-xs sm:text-sm px-4 py-2 rounded-full shadow-2xl border-2 border-amber-200 flex items-center gap-1.5 active:scale-95 transition-transform cursor-pointer truncate"
           >
-            <Sparkles className="w-4 h-4 text-yellow-200 animate-spin" />
-            <span>{nearInteractable.text}</span>
+            <Sparkles className="w-4 h-4 text-yellow-200 animate-spin shrink-0" />
+            <span className="truncate">{nearInteractable.text}</span>
           </button>
         </div>
       )}
 
-      {/* Bottom Dock: 5 Equipped Pet Skill Slots for Mobile Landscape */}
+      {/* Bottom Dock: 5 Equipped Pet Skill Slots (Portrait & Mobile) */}
       <footer className="pointer-events-auto absolute bottom-2 inset-x-0 flex flex-col items-center justify-end z-30">
         {/* Zen Toggle Handle */}
         <button

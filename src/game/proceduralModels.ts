@@ -714,6 +714,839 @@ export function createSlimeModel(): PetMeshGroup {
   return group;
 }
 
+// 7. Red Panda
+export function createRedPandaModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matRusset = new THREE.MeshStandardMaterial({ color: 0xd95d39, roughness: 0.85 });
+  const matDark = new THREE.MeshStandardMaterial({ color: 0x3b2218, roughness: 0.9 });
+  const matCream = new THREE.MeshStandardMaterial({ color: 0xfaedcd, roughness: 0.8 });
+  const matLeaf = new THREE.MeshStandardMaterial({ color: 0x52b788, roughness: 0.7 });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.36, 0.64), matRusset);
+  body.position.set(0, 0.34, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  const belly = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.56), matDark);
+  belly.position.set(0, 0.22, 0);
+  group.add(belly);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.54, 0.34);
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.34), matRusset);
+  headMesh.castShadow = true;
+  head.add(headMesh);
+
+  const mask = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.18, 0.08), matCream);
+  mask.position.set(0, -0.02, 0.16);
+  head.add(mask);
+
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.1), matCream);
+  snout.position.set(0, -0.06, 0.21);
+  head.add(snout);
+
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.05), matDark);
+  nose.position.set(0, -0.04, 0.26);
+  head.add(nose);
+
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.04), matDark);
+  eyeL.position.set(0.1, 0.03, 0.19);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.1, 0.03, 0.19);
+  head.add(eyeL, eyeR);
+
+  const earGeo = new THREE.ConeGeometry(0.09, 0.16, 4);
+  const earL = new THREE.Mesh(earGeo, matCream);
+  earL.position.set(0.16, 0.2, 0.02);
+  earL.rotation.z = -0.25;
+  const earR = earL.clone();
+  earR.position.set(-0.16, 0.2, 0.02);
+  earR.rotation.z = 0.25;
+  head.add(earL, earR);
+
+  // Cute leaf crest
+  const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 4), matLeaf);
+  leaf.position.set(0.05, 0.2, 0.05);
+  leaf.rotation.z = -0.5;
+  head.add(leaf);
+
+  group.add(head);
+
+  const legGeo = new THREE.BoxGeometry(0.13, 0.24, 0.13);
+  const legFL = new THREE.Mesh(legGeo, matDark);
+  legFL.position.set(0.16, 0.12, 0.2);
+  legFL.castShadow = true;
+  const legFR = legFL.clone();
+  legFR.position.set(-0.16, 0.12, 0.2);
+  const legBL = legFL.clone();
+  legBL.position.set(0.16, 0.12, -0.2);
+  const legBR = legFL.clone();
+  legBR.position.set(-0.16, 0.12, -0.2);
+  group.add(legFL, legFR, legBL, legBR);
+
+  // Ringed bushy tail
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.36, -0.34);
+  for (let i = 0; i < 4; i++) {
+    const seg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12 - i * 0.015, 0.13 - i * 0.015, 0.16, 6),
+      i % 2 === 0 ? matRusset : matDark
+    );
+    seg.rotation.x = -Math.PI / 2.6;
+    seg.position.set(0, 0.08 + i * 0.06, -0.1 - i * 0.13);
+    tail.add(seg);
+  }
+  group.add(tail);
+
+  group.userData = {
+    species: 'red_panda',
+    body,
+    head,
+    tail,
+    ears: [earL, earR],
+    legs: [legFL, legFR, legBL, legBR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 8. Timber Wolf
+export function createTimberWolfModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matCoat = new THREE.MeshStandardMaterial({ color: 0x7f5539, roughness: 0.85 });
+  const matMane = new THREE.MeshStandardMaterial({ color: 0x582f0e, roughness: 0.9 });
+  const matBelly = new THREE.MeshStandardMaterial({ color: 0xddb892, roughness: 0.8 });
+  const matDark = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0xffb703 });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.42, 0.78), matCoat);
+  body.position.set(0, 0.45, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  const mane = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.44, 0.32), matMane);
+  mane.position.set(0, 0.5, 0.22);
+  mane.castShadow = true;
+  group.add(mane);
+
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.24, 0.28), matBelly);
+  chest.position.set(0, 0.38, 0.28);
+  group.add(chest);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.68, 0.44);
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.32, 0.38), matCoat);
+  headMesh.castShadow = true;
+  head.add(headMesh);
+
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.24), matBelly);
+  snout.position.set(0, -0.05, 0.24);
+  head.add(snout);
+
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.06), matDark);
+  nose.position.set(0, -0.01, 0.36);
+  head.add(nose);
+
+  const earGeo = new THREE.ConeGeometry(0.08, 0.2, 4);
+  const earL = new THREE.Mesh(earGeo, matMane);
+  earL.position.set(0.12, 0.22, -0.02);
+  const earR = earL.clone();
+  earR.position.set(-0.12, 0.22, -0.02);
+  head.add(earL, earR);
+
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.03), matEye);
+  eyeL.position.set(0.11, 0.04, 0.19);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.11, 0.04, 0.19);
+  head.add(eyeL, eyeR);
+  group.add(head);
+
+  const legGeo = new THREE.BoxGeometry(0.13, 0.36, 0.13);
+  const legFL = new THREE.Mesh(legGeo, matCoat);
+  legFL.position.set(0.16, 0.18, 0.26);
+  legFL.castShadow = true;
+  const legFR = legFL.clone();
+  legFR.position.set(-0.16, 0.18, 0.26);
+  const legBL = legFL.clone();
+  legBL.position.set(0.16, 0.18, -0.26);
+  const legBR = legFL.clone();
+  legBR.position.set(-0.16, 0.18, -0.26);
+  group.add(legFL, legFR, legBL, legBR);
+
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.48, 5), matMane);
+  tail.rotation.x = -Math.PI / 3;
+  tail.position.set(0, 0.52, -0.46);
+  group.add(tail);
+
+  group.userData = {
+    species: 'timber_wolf',
+    body,
+    head,
+    tail,
+    ears: [earL, earR],
+    legs: [legFL, legFR, legBL, legBR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 9. Sylvan Deer
+export function createSylvanDeerModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matHide = new THREE.MeshStandardMaterial({ color: 0x9c6644, roughness: 0.8 });
+  const matCream = new THREE.MeshStandardMaterial({ color: 0xf5ebe0, roughness: 0.85 });
+  const matAntler = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.65 });
+  const matLeaf = new THREE.MeshStandardMaterial({ color: 0x70e000, roughness: 0.6 });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0x1b1b1b });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.38, 0.72), matHide);
+  body.position.set(0, 0.56, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  // Forest spots
+  for (let s = 0; s < 3; s++) {
+    const spot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 5), matCream);
+    spot.position.set(0.18, 0.62 + (s % 2) * 0.05, -0.15 + s * 0.15);
+    group.add(spot);
+  }
+
+  // Slender neck + head
+  const head = new THREE.Group();
+  head.position.set(0, 0.86, 0.32);
+
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.34, 0.2), matHide);
+  neck.position.set(0, -0.14, -0.06);
+  neck.rotation.x = 0.22;
+  head.add(neck);
+
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.24, 0.32), matHide);
+  headMesh.castShadow = true;
+  head.add(headMesh);
+
+  const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.16), matCream);
+  muzzle.position.set(0, -0.05, 0.2);
+  head.add(muzzle);
+
+  const earGeo = new THREE.BoxGeometry(0.14, 0.07, 0.05);
+  const earL = new THREE.Mesh(earGeo, matHide);
+  earL.position.set(0.16, 0.08, -0.06);
+  earL.rotation.z = 0.35;
+  const earR = earL.clone();
+  earR.position.set(-0.16, 0.08, -0.06);
+  earR.rotation.z = -0.35;
+  head.add(earL, earR);
+
+  // Branching antlers with verdant leaves
+  const antStemL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.36, 5), matAntler);
+  antStemL.position.set(0.1, 0.26, -0.02);
+  antStemL.rotation.z = -0.25;
+  const antForkL = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.18, 5), matAntler);
+  antForkL.position.set(0.16, 0.32, 0.05);
+  antForkL.rotation.x = 0.5;
+  const leafL = new THREE.Mesh(new THREE.DodecahedronGeometry(0.06, 0), matLeaf);
+  leafL.position.set(0.14, 0.42, -0.02);
+
+  const antStemR = antStemL.clone();
+  antStemR.position.set(-0.1, 0.26, -0.02);
+  antStemR.rotation.z = 0.25;
+  const antForkR = antForkL.clone();
+  antForkR.position.set(-0.16, 0.32, 0.05);
+  const leafR = leafL.clone();
+  leafR.position.set(-0.14, 0.42, -0.02);
+
+  head.add(antStemL, antForkL, leafL, antStemR, antForkR, leafR);
+
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.03), matEye);
+  eyeL.position.set(0.12, 0.03, 0.12);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.12, 0.03, 0.12);
+  head.add(eyeL, eyeR);
+  group.add(head);
+
+  const legGeo = new THREE.BoxGeometry(0.1, 0.44, 0.1);
+  const legFL = new THREE.Mesh(legGeo, matHide);
+  legFL.position.set(0.14, 0.22, 0.24);
+  legFL.castShadow = true;
+  const legFR = legFL.clone();
+  legFR.position.set(-0.14, 0.22, 0.24);
+  const legBL = legFL.clone();
+  legBL.position.set(0.14, 0.22, -0.24);
+  const legBR = legFL.clone();
+  legBR.position.set(-0.14, 0.22, -0.24);
+  group.add(legFL, legFR, legBL, legBR);
+
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.18, 5), matCream);
+  tail.position.set(0, 0.62, -0.38);
+  tail.rotation.x = -0.6;
+  group.add(tail);
+
+  group.userData = {
+    species: 'sylvan_deer',
+    body,
+    head,
+    tail,
+    ears: [earL, earR],
+    legs: [legFL, legFR, legBL, legBR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 10. Penguin
+export function createPenguinModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matNavy = new THREE.MeshStandardMaterial({ color: 0x1d3557, roughness: 0.7 });
+  const matWhite = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.85 });
+  const matBeak = new THREE.MeshStandardMaterial({ color: 0xffb703, roughness: 0.45 });
+  const matScarf = new THREE.MeshStandardMaterial({ color: 0x90e0ef, roughness: 0.75 });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.32, 0.56, 8), matNavy);
+  body.position.set(0, 0.36, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  const belly = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.26, 0.48, 8), matWhite);
+  belly.position.set(0, 0.35, 0.08);
+  group.add(belly);
+
+  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.05, 6, 12), matScarf);
+  scarf.rotation.x = Math.PI / 2;
+  scarf.position.set(0, 0.6, 0.02);
+  group.add(scarf);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.72, 0.03);
+  const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), matNavy);
+  headMesh.castShadow = true;
+  head.add(headMesh);
+
+  const faceL = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 6), matWhite);
+  faceL.position.set(0.08, -0.02, 0.16);
+  const faceR = faceL.clone();
+  faceR.position.set(-0.08, -0.02, 0.16);
+  head.add(faceL, faceR);
+
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 5, 5), matEye);
+  eyeL.position.set(0.09, 0.02, 0.22);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.09, 0.02, 0.22);
+  head.add(eyeL, eyeR);
+
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 4), matBeak);
+  beak.rotation.x = Math.PI / 2;
+  beak.position.set(0, -0.04, 0.26);
+  head.add(beak);
+  group.add(head);
+
+  const flipperGeo = new THREE.BoxGeometry(0.07, 0.36, 0.16);
+  const wingL = new THREE.Mesh(flipperGeo, matNavy);
+  wingL.position.set(0.3, 0.4, 0);
+  wingL.rotation.z = 0.25;
+  const wingR = wingL.clone();
+  wingR.position.set(-0.3, 0.4, 0);
+  wingR.rotation.z = -0.25;
+  group.add(wingL, wingR);
+
+  const footGeo = new THREE.BoxGeometry(0.14, 0.07, 0.22);
+  const footL = new THREE.Mesh(footGeo, matBeak);
+  footL.position.set(0.13, 0.04, 0.08);
+  const footR = footL.clone();
+  footR.position.set(-0.13, 0.04, 0.08);
+  group.add(footL, footR);
+
+  group.userData = {
+    species: 'penguin',
+    body,
+    head,
+    wings: [wingL, wingR],
+    legs: [footL, footR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 11. Bat
+export function createBatModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matBody = new THREE.MeshStandardMaterial({ color: 0x4c1d95, roughness: 0.75 });
+  const matWing = new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.65, side: THREE.DoubleSide });
+  const matEarInner = new THREE.MeshStandardMaterial({ color: 0xe879f9, roughness: 0.8 });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), matBody);
+  body.scale.set(0.95, 1.15, 0.9);
+  body.position.set(0, 0.68, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.95, 0.08);
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 0.24), matBody);
+  headMesh.castShadow = true;
+  head.add(headMesh);
+
+  const earGeo = new THREE.ConeGeometry(0.08, 0.24, 4);
+  const earL = new THREE.Mesh(earGeo, matBody);
+  earL.position.set(0.1, 0.2, 0);
+  earL.rotation.z = -0.2;
+  const innerL = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.15, 4), matEarInner);
+  innerL.position.set(0, -0.02, 0.03);
+  earL.add(innerL);
+
+  const earR = earL.clone();
+  earR.position.set(-0.1, 0.2, 0);
+  earR.rotation.z = 0.2;
+  head.add(earL, earR);
+
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.038, 5, 5), matEye);
+  eyeL.position.set(0.08, 0.02, 0.12);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.08, 0.02, 0.12);
+  head.add(eyeL, eyeR);
+
+  // Cute tiny fangs
+  const fangGeo = new THREE.ConeGeometry(0.02, 0.06, 4);
+  const fangMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const fangL = new THREE.Mesh(fangGeo, fangMat);
+  fangL.rotation.x = Math.PI;
+  fangL.position.set(0.04, -0.08, 0.12);
+  const fangR = fangL.clone();
+  fangR.position.set(-0.04, -0.08, 0.12);
+  head.add(fangL, fangR);
+
+  group.add(head);
+
+  const wingL = new THREE.Group();
+  wingL.position.set(0.18, 0.74, 0);
+  const wingMeshL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.28, 0.04), matWing);
+  wingMeshL.position.set(0.28, 0, 0);
+  wingL.add(wingMeshL);
+
+  const wingR = new THREE.Group();
+  wingR.position.set(-0.18, 0.74, 0);
+  const wingMeshR = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.28, 0.04), matWing);
+  wingMeshR.position.set(-0.28, 0, 0);
+  wingR.add(wingMeshR);
+  group.add(wingL, wingR);
+
+  group.userData = {
+    species: 'bat',
+    body,
+    head,
+    ears: [earL, earR],
+    wings: [wingL, wingR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 12. Venom Frog
+export function createPoisonFrogModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matSkin = new THREE.MeshStandardMaterial({ color: 0x38b000, roughness: 0.55 });
+  const matSpot = new THREE.MeshStandardMaterial({ color: 0x9ef01a, roughness: 0.4 });
+  const matBelly = new THREE.MeshStandardMaterial({ color: 0xd8f3dc, roughness: 0.75 });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+  const matPupil = new THREE.MeshBasicMaterial({ color: 0x111111 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 9, 8), matSkin);
+  body.scale.set(1.15, 0.78, 1.15);
+  body.position.set(0, 0.26, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), matBelly);
+  belly.scale.set(1.05, 0.55, 1.0);
+  belly.position.set(0, 0.18, 0.05);
+  group.add(belly);
+
+  // Poison spots on back
+  for (let i = 0; i < 3; i++) {
+    const sp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 5, 5), matSpot);
+    sp.position.set((i - 1) * 0.14, 0.46, -0.05 - (i % 2) * 0.1);
+    group.add(sp);
+  }
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.34, 0.22);
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.2, 0.3), matSkin);
+  head.add(headMesh);
+
+  // Bulging frog eyes
+  const eyeSocketL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), matSkin);
+  eyeSocketL.position.set(0.15, 0.14, 0.05);
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 6), matEye);
+  eyeL.position.set(0.15, 0.15, 0.1);
+  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 5, 5), matPupil);
+  pupilL.position.set(0.15, 0.15, 0.15);
+
+  const eyeSocketR = eyeSocketL.clone();
+  eyeSocketR.position.set(-0.15, 0.14, 0.05);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.15, 0.15, 0.1);
+  const pupilR = pupilL.clone();
+  pupilR.position.set(-0.15, 0.15, 0.15);
+  head.add(eyeSocketL, eyeL, pupilL, eyeSocketR, eyeR, pupilR);
+
+  // Pink curled tongue hint
+  const tongue = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.03, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0xff4d6d, roughness: 0.4 })
+  );
+  tongue.position.set(0, -0.06, 0.16);
+  head.add(tongue);
+  group.add(head);
+
+  const legFL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.12), matSkin);
+  legFL.position.set(0.2, 0.1, 0.22);
+  const legFR = legFL.clone();
+  legFR.position.set(-0.2, 0.1, 0.22);
+  const legBL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.26), matSkin);
+  legBL.position.set(0.24, 0.12, -0.18);
+  const legBR = legBL.clone();
+  legBR.position.set(-0.24, 0.12, -0.18);
+  group.add(legFL, legFR, legBL, legBR);
+
+  group.userData = {
+    species: 'poison_frog',
+    body,
+    head,
+    tail: tongue,
+    legs: [legFL, legFR, legBL, legBR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 13. Hedgehog
+export function createHedgehogModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matQuill = new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.9 });
+  const matFace = new THREE.MeshStandardMaterial({ color: 0xffe0b2, roughness: 0.8 });
+  const matNose = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+
+  const body = new THREE.Group();
+  body.position.set(0, 0.28, 0);
+
+  const coreBody = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 8), matQuill);
+  coreBody.scale.set(1.05, 0.9, 1.2);
+  coreBody.castShadow = true;
+  body.add(coreBody);
+
+  // Spiky quills radiating backward/upward
+  const quillGeo = new THREE.ConeGeometry(0.065, 0.22, 4);
+  const quillOffsets: [number, number, number, number, number][] = [
+    [0, 0.26, -0.05, -0.5, 0],
+    [0.18, 0.2, -0.1, -0.5, -0.4],
+    [-0.18, 0.2, -0.1, -0.5, 0.4],
+    [0, 0.16, -0.28, -1.0, 0],
+    [0.2, 0.1, -0.25, -0.9, -0.5],
+    [-0.2, 0.1, -0.25, -0.9, 0.5],
+    [0.12, 0.24, 0.08, -0.3, -0.3],
+    [-0.12, 0.24, 0.08, -0.3, 0.3],
+  ];
+  quillOffsets.forEach(([x, y, z, rx, rz]) => {
+    const q = new THREE.Mesh(quillGeo, matQuill);
+    q.position.set(x, y, z);
+    q.rotation.set(rx, 0, rz);
+    body.add(q);
+  });
+  group.add(body);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.26, 0.32);
+  const snout = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.3, 6), matFace);
+  snout.rotation.x = Math.PI / 2;
+  head.add(snout);
+
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 5, 5), matNose);
+  nose.position.set(0, 0, 0.15);
+  head.add(nose);
+
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 5, 5), matNose);
+  eyeL.position.set(0.09, 0.06, 0.04);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.09, 0.06, 0.04);
+  head.add(eyeL, eyeR);
+
+  const earGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.03, 6);
+  earGeo.rotateX(Math.PI / 2);
+  const earL = new THREE.Mesh(earGeo, matFace);
+  earL.position.set(0.13, 0.1, -0.08);
+  const earR = earL.clone();
+  earR.position.set(-0.13, 0.1, -0.08);
+  head.add(earL, earR);
+  group.add(head);
+
+  const legGeo = new THREE.BoxGeometry(0.09, 0.14, 0.12);
+  const legFL = new THREE.Mesh(legGeo, matFace);
+  legFL.position.set(0.14, 0.07, 0.18);
+  const legFR = legFL.clone();
+  legFR.position.set(-0.14, 0.07, 0.18);
+  const legBL = legFL.clone();
+  legBL.position.set(0.14, 0.07, -0.18);
+  const legBR = legFL.clone();
+  legBR.position.set(-0.14, 0.07, -0.18);
+  group.add(legFL, legFR, legBL, legBR);
+
+  group.userData = {
+    species: 'hedgehog',
+    body,
+    head,
+    ears: [earL, earR],
+    legs: [legFL, legFR, legBL, legBR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 14. Bee
+export function createBeeModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matYellow = new THREE.MeshStandardMaterial({ color: 0xffb703, roughness: 0.4 });
+  const matStripe = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.7 });
+  const matWing = new THREE.MeshStandardMaterial({
+    color: 0xe0f2fe,
+    transparent: true,
+    opacity: 0.78,
+    roughness: 0.2,
+    side: THREE.DoubleSide,
+  });
+
+  const body = new THREE.Group();
+  body.position.set(0, 0.65, 0);
+
+  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.24, 9, 8), matYellow);
+  thorax.scale.set(1.0, 0.95, 1.35);
+  thorax.castShadow = true;
+  body.add(thorax);
+
+  const stripe1 = new THREE.Mesh(new THREE.CylinderGeometry(0.245, 0.245, 0.09, 10), matStripe);
+  stripe1.rotation.x = Math.PI / 2;
+  stripe1.position.set(0, 0, -0.03);
+  const stripe2 = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.08, 10), matStripe);
+  stripe2.rotation.x = Math.PI / 2;
+  stripe2.position.set(0, 0, -0.17);
+  body.add(stripe1, stripe2);
+
+  const stinger = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 4), matStripe);
+  stinger.rotation.x = -Math.PI / 2;
+  stinger.position.set(0, 0, -0.36);
+  body.add(stinger);
+  group.add(body);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.68, 0.34);
+  const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), matYellow);
+  head.add(headMesh);
+
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), matStripe);
+  eyeL.position.set(0.09, 0.03, 0.13);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.09, 0.03, 0.13);
+  head.add(eyeL, eyeR);
+
+  const antGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.16, 4);
+  const antL = new THREE.Mesh(antGeo, matStripe);
+  antL.position.set(0.06, 0.18, 0.06);
+  antL.rotation.set(0.4, 0, -0.3);
+  const antR = antL.clone();
+  antR.position.set(-0.06, 0.18, 0.06);
+  antR.rotation.set(0.4, 0, 0.3);
+  head.add(antL, antR);
+  group.add(head);
+
+  const wingL = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.22), matWing);
+  wingL.rotation.x = -Math.PI / 2;
+  wingL.position.set(0.26, 0.86, 0.02);
+  const wingR = wingL.clone();
+  wingR.position.set(-0.26, 0.86, 0.02);
+  group.add(wingL, wingR);
+
+  group.userData = {
+    species: 'bee',
+    body,
+    head,
+    wings: [wingL, wingR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 15. Dragon Whelp
+export function createDragonWhelpModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matScale = new THREE.MeshStandardMaterial({ color: 0xe63946, roughness: 0.45 });
+  const matBelly = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.65 });
+  const matHorn = new THREE.MeshStandardMaterial({ color: 0xfefae0, roughness: 0.4 });
+  const matWing = new THREE.MeshStandardMaterial({ color: 0xf77f00, roughness: 0.55, side: THREE.DoubleSide });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0xffbe0b });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.4, 0.64), matScale);
+  body.position.set(0, 0.42, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  const belly = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.22, 0.56), matBelly);
+  belly.position.set(0, 0.32, 0.02);
+  group.add(belly);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.72, 0.36);
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.28, 0.38), matScale);
+  headMesh.castShadow = true;
+  head.add(headMesh);
+
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.18), matScale);
+  snout.position.set(0, -0.04, 0.22);
+  head.add(snout);
+
+  const hornGeo = new THREE.ConeGeometry(0.05, 0.2, 4);
+  const hornL = new THREE.Mesh(hornGeo, matHorn);
+  hornL.position.set(0.11, 0.2, -0.06);
+  hornL.rotation.x = -0.35;
+  const hornR = hornL.clone();
+  hornR.position.set(-0.11, 0.2, -0.06);
+  head.add(hornL, hornR);
+
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.03), matEye);
+  eyeL.position.set(0.11, 0.04, 0.19);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.11, 0.04, 0.19);
+  head.add(eyeL, eyeR);
+  group.add(head);
+
+  const wingL = new THREE.Group();
+  wingL.position.set(0.22, 0.54, 0.05);
+  const wingMeshL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.34), matWing);
+  wingMeshL.position.set(0.25, 0.08, -0.05);
+  wingL.add(wingMeshL);
+
+  const wingR = new THREE.Group();
+  wingR.position.set(-0.22, 0.54, 0.05);
+  const wingMeshR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.34), matWing);
+  wingMeshR.position.set(-0.25, 0.08, -0.05);
+  wingR.add(wingMeshR);
+  group.add(wingL, wingR);
+
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.38, -0.34);
+  const tailBody = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.52, 5), matScale);
+  tailBody.rotation.x = -Math.PI / 2.3;
+  tailBody.position.set(0, 0.05, -0.2);
+  const tailFlame = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), matEye);
+  tailFlame.position.set(0, 0.16, -0.44);
+  tail.add(tailBody, tailFlame);
+  group.add(tail);
+
+  const legGeo = new THREE.BoxGeometry(0.13, 0.24, 0.13);
+  const legFL = new THREE.Mesh(legGeo, matScale);
+  legFL.position.set(0.15, 0.12, 0.2);
+  const legFR = legFL.clone();
+  legFR.position.set(-0.15, 0.12, 0.2);
+  const legBL = legFL.clone();
+  legBL.position.set(0.15, 0.12, -0.2);
+  const legBR = legFL.clone();
+  legBR.position.set(-0.15, 0.12, -0.2);
+  group.add(legFL, legFR, legBL, legBR);
+
+  group.userData = {
+    species: 'dragon_whelp',
+    body,
+    head,
+    tail,
+    wings: [wingL, wingR],
+    legs: [legFL, legFR, legBL, legBR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
+// 16. Capybara
+export function createCapybaraModel(): PetMeshGroup {
+  const group = new THREE.Group() as PetMeshGroup;
+  const matCoat = new THREE.MeshStandardMaterial({ color: 0xa47148, roughness: 0.88 });
+  const matSnout = new THREE.MeshStandardMaterial({ color: 0x6f4518, roughness: 0.9 });
+  const matOrange = new THREE.MeshStandardMaterial({ color: 0xff8500, roughness: 0.35 });
+  const matLeaf = new THREE.MeshStandardMaterial({ color: 0x38b000, roughness: 0.6 });
+  const matEye = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+
+  // Plump loaf body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.44, 0.84), matCoat);
+  body.position.set(0, 0.36, 0);
+  body.castShadow = true;
+  group.add(body);
+
+  // Relaxed block head
+  const head = new THREE.Group();
+  head.position.set(0, 0.58, 0.42);
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.3, 0.44), matCoat);
+  headMesh.castShadow = true;
+  head.add(headMesh);
+
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.16), matSnout);
+  snout.position.set(0, -0.04, 0.22);
+  head.add(snout);
+
+  // Half-closed chill eyes
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.025, 0.06), matEye);
+  eyeL.position.set(0.17, 0.06, 0.06);
+  const eyeR = eyeL.clone();
+  eyeR.position.set(-0.17, 0.06, 0.06);
+  head.add(eyeL, eyeR);
+
+  const earGeo = new THREE.BoxGeometry(0.08, 0.08, 0.06);
+  const earL = new THREE.Mesh(earGeo, matSnout);
+  earL.position.set(0.15, 0.17, -0.14);
+  const earR = earL.clone();
+  earR.position.set(-0.15, 0.17, -0.14);
+  head.add(earL, earR);
+
+  // Iconic yuzu/orange sitting peacefully on top of head!
+  const citrus = new THREE.Mesh(new THREE.SphereGeometry(0.11, 7, 7), matOrange);
+  citrus.position.set(0, 0.24, 0);
+  const citrusLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.04), matLeaf);
+  citrusLeaf.position.set(0.04, 0.11, 0);
+  citrus.add(citrusLeaf);
+  head.add(citrus);
+
+  group.add(head);
+
+  const legGeo = new THREE.BoxGeometry(0.15, 0.22, 0.15);
+  const legFL = new THREE.Mesh(legGeo, matSnout);
+  legFL.position.set(0.18, 0.11, 0.26);
+  legFL.castShadow = true;
+  const legFR = legFL.clone();
+  legFR.position.set(-0.18, 0.11, 0.26);
+  const legBL = legFL.clone();
+  legBL.position.set(0.18, 0.11, -0.26);
+  const legBR = legFL.clone();
+  legBR.position.set(-0.18, 0.11, -0.26);
+  group.add(legFL, legFR, legBL, legBR);
+
+  group.userData = {
+    species: 'capybara',
+    body,
+    head,
+    ears: [earL, earR],
+    legs: [legFL, legFR, legBL, legBR],
+    animTime: 0,
+    initialY: 0,
+  };
+  return group;
+}
+
 // --- FARM ENVIRONMENT BUILDINGS & PROPS ---
 
 export function createFarmhouse(): THREE.Group {
@@ -1113,11 +1946,23 @@ export function createCropMesh(cropId: string, progress: number, isHarvested = f
       babyCob.position.set(0.08, stalkH * 0.6, 0);
       babyCob.rotation.z = 0.3;
       group.add(babyCob);
-    } else if (cropId === 'pumpkin') {
+    } else if (cropId === 'pumpkin' || cropId === 'watermelon' || cropId === 'sunmelon') {
       const babyPumpkin = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), unripeMat);
       babyPumpkin.scale.set(1.2, 0.8, 1.2);
       babyPumpkin.position.set(0.1, 0.1, 0.1);
       group.add(babyPumpkin);
+    } else if (cropId === 'blueberry' || cropId === 'grapes' || cropId === 'moonberry') {
+      const cluster = new THREE.Mesh(new THREE.SphereGeometry(0.06, 5, 5), unripeMat);
+      cluster.position.set(0.08, stalkH * 0.72, 0.05);
+      group.add(cluster);
+    } else if (cropId === 'glow_mushroom') {
+      const miniCap = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.1, 6), unripeMat);
+      miniCap.position.set(0, stalkH * 0.85, 0);
+      group.add(miniCap);
+    } else if (cropId === 'lavender') {
+      const spire = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.18, 5), unripeMat);
+      spire.position.set(0, stalkH + 0.12, 0);
+      group.add(spire);
     }
   } else {
     // ----------------------------------------------------
@@ -1250,6 +2095,123 @@ export function createCropMesh(cropId: string, progress: number, isHarvested = f
       pStem.rotation.z = 0.25;
       pumpkin.add(pStem);
       group.add(pumpkin);
+    } else if (cropId === 'blueberry') {
+      const berryMat = new THREE.MeshStandardMaterial({ color: 0x4361ee, roughness: 0.3 });
+      for (let b = 0; b < 5; b++) {
+        const ang = (b * Math.PI * 2) / 5;
+        const berry = new THREE.Mesh(new THREE.SphereGeometry(0.085, 6, 6), berryMat);
+        berry.position.set(Math.cos(ang) * 0.18, 0.32 + (b % 2) * 0.14, Math.sin(ang) * 0.18);
+        group.add(berry);
+      }
+    } else if (cropId === 'watermelon') {
+      const melonMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.45 });
+      const stripeMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.6 });
+      const melon = new THREE.Mesh(new THREE.SphereGeometry(0.28, 9, 8), melonMat);
+      melon.scale.set(1.3, 0.9, 1.0);
+      melon.position.set(0, 0.26, 0);
+      const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.03, 5, 10), stripeMat);
+      stripe.position.set(0, 0.26, 0);
+      group.add(melon, stripe);
+    } else if (cropId === 'pineapple') {
+      const pineMat = new THREE.MeshStandardMaterial({ color: 0xffb703, roughness: 0.55 });
+      const pine = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.34, 7), pineMat);
+      pine.position.set(0, 0.28, 0);
+      group.add(pine);
+      for (let c = 0; c < 4; c++) {
+        const crown = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 4), youngGreenMat);
+        const ang = (c * Math.PI) / 2;
+        crown.position.set(Math.cos(ang) * 0.06, 0.52, Math.sin(ang) * 0.06);
+        crown.rotation.z = 0.25;
+        crown.rotation.y = ang;
+        group.add(crown);
+      }
+    } else if (cropId === 'grapes') {
+      const stake = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.8, 0.05), new THREE.MeshStandardMaterial({ color: 0x8b5a2b }));
+      stake.position.set(0, 0.4, -0.05);
+      const grapeMat = new THREE.MeshStandardMaterial({ color: 0x7b2cbf, roughness: 0.35 });
+      group.add(stake);
+      for (let g = 0; g < 6; g++) {
+        const gOrb = new THREE.Mesh(new THREE.SphereGeometry(0.065, 5, 5), grapeMat);
+        gOrb.position.set(((g % 3) - 1) * 0.09, 0.34 + Math.floor(g / 3) * 0.12, 0.12);
+        group.add(gOrb);
+      }
+    } else if (cropId === 'lavender') {
+      const lavMat = new THREE.MeshStandardMaterial({ color: 0x9d4edd, roughness: 0.65 });
+      for (let l = 0; l < 4; l++) {
+        const ang = (l * Math.PI) / 2;
+        const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.55, 5), stemMat);
+        stalk.position.set(Math.cos(ang) * 0.12, 0.28, Math.sin(ang) * 0.12);
+        const spire = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.26, 5), lavMat);
+        spire.position.set(Math.cos(ang) * 0.12, 0.56, Math.sin(ang) * 0.12);
+        group.add(stalk, spire);
+      }
+    } else if (cropId === 'glow_mushroom') {
+      const capMat = new THREE.MeshStandardMaterial({
+        color: 0x06d6a0,
+        emissive: 0x06d6a0,
+        emissiveIntensity: 0.45,
+        roughness: 0.3,
+      });
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.22, 8), capMat);
+      cap.position.set(0, 0.42, 0);
+      const spotM = new THREE.MeshBasicMaterial({ color: 0xa5f3fc });
+      for (let s = 0; s < 3; s++) {
+        const ang = (s * Math.PI * 2) / 3;
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 5, 5), spotM);
+        dot.position.set(Math.cos(ang) * 0.13, 0.4, Math.sin(ang) * 0.13);
+        group.add(dot);
+      }
+      group.add(cap);
+    } else if (cropId === 'starfruit') {
+      const starMat = new THREE.MeshStandardMaterial({
+        color: 0xffd60a,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.2,
+        roughness: 0.3,
+      });
+      const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), starMat);
+      star.scale.set(1.2, 1.35, 0.7);
+      star.position.set(0, 0.48, 0.06);
+      group.add(star);
+    } else if (cropId === 'moonberry') {
+      const moonMat = new THREE.MeshStandardMaterial({
+        color: 0x6366f1,
+        emissive: 0x4f46e5,
+        emissiveIntensity: 0.3,
+        roughness: 0.25,
+      });
+      for (let m = 0; m < 3; m++) {
+        const ang = (m * Math.PI * 2) / 3;
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 7, 7), moonMat);
+        orb.position.set(Math.cos(ang) * 0.15, 0.38 + (m % 2) * 0.1, Math.sin(ang) * 0.15);
+        group.add(orb);
+      }
+    } else if (cropId === 'crystal_fruit') {
+      const crysMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.35,
+        roughness: 0.15,
+        metalness: 0.2,
+      });
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), crysMat);
+      gem.scale.set(0.85, 1.35, 0.85);
+      gem.position.set(0, 0.45, 0);
+      group.add(gem);
+    } else if (cropId === 'sunmelon') {
+      const sunMat = new THREE.MeshStandardMaterial({
+        color: 0xff9e00,
+        emissive: 0xff5400,
+        emissiveIntensity: 0.35,
+        roughness: 0.35,
+      });
+      const melon = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), sunMat);
+      melon.scale.set(1.25, 0.9, 1.25);
+      melon.position.set(0, 0.28, 0);
+      const flare = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.03, 5, 12), new THREE.MeshBasicMaterial({ color: 0xfde047 }));
+      flare.rotation.x = Math.PI / 2;
+      flare.position.set(0, 0.28, 0);
+      group.add(melon, flare);
     } else {
       // Generic fallback crop
       const genericMat = new THREE.MeshStandardMaterial({ color: 0xffd166, roughness: 0.4 });
@@ -1314,6 +2276,44 @@ export function createHarvestItemMesh(cropId: string): THREE.Group {
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.14, 5), new THREE.MeshStandardMaterial({ color: 0x40916c }));
     stem.position.y = 0.22;
     item.add(p, stem);
+  } else if (cropId === 'blueberry') {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.17, 7, 7), new THREE.MeshStandardMaterial({ color: 0x4361ee }));
+    item.add(b);
+  } else if (cropId === 'watermelon') {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 7), new THREE.MeshStandardMaterial({ color: 0x2d6a4f }));
+    m.scale.set(1.25, 0.9, 1.0);
+    item.add(m);
+  } else if (cropId === 'pineapple') {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.32, 7), new THREE.MeshStandardMaterial({ color: 0xffb703 }));
+    const crown = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.2, 5), new THREE.MeshStandardMaterial({ color: 0x38b000 }));
+    crown.position.y = 0.24;
+    item.add(p, crown);
+  } else if (cropId === 'grapes') {
+    const g = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: 0x7b2cbf }));
+    item.add(g);
+  } else if (cropId === 'lavender') {
+    const l = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.38, 5), new THREE.MeshStandardMaterial({ color: 0x9d4edd }));
+    item.add(l);
+  } else if (cropId === 'glow_mushroom') {
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.2, 7), new THREE.MeshStandardMaterial({ color: 0x06d6a0, emissive: 0x06d6a0, emissiveIntensity: 0.4 }));
+    cap.position.y = 0.08;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.22, 6), new THREE.MeshStandardMaterial({ color: 0xfefae0 }));
+    stem.position.y = -0.06;
+    item.add(cap, stem);
+  } else if (cropId === 'starfruit') {
+    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshStandardMaterial({ color: 0xffd60a, emissive: 0xffaa00, emissiveIntensity: 0.25 }));
+    item.add(s);
+  } else if (cropId === 'moonberry') {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshStandardMaterial({ color: 0x6366f1, emissive: 0x4f46e5, emissiveIntensity: 0.35 }));
+    item.add(m);
+  } else if (cropId === 'crystal_fruit') {
+    const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.4 }));
+    c.scale.set(0.85, 1.3, 0.85);
+    item.add(c);
+  } else if (cropId === 'sunmelon') {
+    const sm = new THREE.Mesh(new THREE.SphereGeometry(0.25, 9, 8), new THREE.MeshStandardMaterial({ color: 0xff9e00, emissive: 0xff5400, emissiveIntensity: 0.35 }));
+    sm.scale.set(1.2, 0.88, 1.2);
+    item.add(sm);
   } else {
     const gem = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: 0xffb703 }));
     item.add(gem);
@@ -1736,6 +2736,26 @@ export function createPetModel(species: string): PetMeshGroup {
       phoenix.scale.set(1.25, 1.25, 1.25);
       return phoenix;
     }
+    case 'red_panda':
+      return createRedPandaModel();
+    case 'timber_wolf':
+      return createTimberWolfModel();
+    case 'sylvan_deer':
+      return createSylvanDeerModel();
+    case 'penguin':
+      return createPenguinModel();
+    case 'bat':
+      return createBatModel();
+    case 'poison_frog':
+      return createPoisonFrogModel();
+    case 'hedgehog':
+      return createHedgehogModel();
+    case 'bee':
+      return createBeeModel();
+    case 'dragon_whelp':
+      return createDragonWhelpModel();
+    case 'capybara':
+      return createCapybaraModel();
     default:
       return createFoxModel();
   }
@@ -2144,6 +3164,241 @@ export function createPetDenBuilding(): THREE.Group {
   building.add(waterB);
 
   return building;
+}
+
+// ==========================================
+// PET TRAINING STATION (FARM LANDMARK)
+// ==========================================
+export function createPetTrainingStation(): {
+  group: THREE.Group;
+  crystals: THREE.Object3D[];
+} {
+  const station = new THREE.Group();
+  station.name = 'pet_training_station';
+  const crystals: THREE.Object3D[] = [];
+
+  const stoneBaseMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.92 });
+  const timberMat = new THREE.MeshStandardMaterial({ color: 0x855835, roughness: 0.84 });
+  const darkTimberMat = new THREE.MeshStandardMaterial({ color: 0x4a2f18, roughness: 0.9 });
+  const arenaFloorMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.78 });
+  const clothBannerMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.65 });
+  const dummyStrawMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.85 });
+  const targetRedMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.55 });
+  const targetWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+  const padGlowMat = new THREE.MeshBasicMaterial({
+    color: 0xa855f7,
+    transparent: true,
+    opacity: 0.42,
+    side: THREE.DoubleSide,
+  });
+
+  // 1. Cobblestone Base & Offset Arena Deck (Z-fighting safe >= 0.04m Y separation)
+  const base = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.34, 5.8), stoneBaseMat);
+  base.position.set(0, 0.17, 0);
+  base.castShadow = true;
+  base.receiveShadow = true;
+  station.add(base);
+
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.1, 5.0), arenaFloorMat);
+  deck.position.set(0, 0.39, 0);
+  deck.receiveShadow = true;
+  station.add(deck);
+
+  // 2. Open-Air Timber Arch Posts & Crossbeam
+  const postGeo = new THREE.CylinderGeometry(0.16, 0.2, 3.0, 6);
+  const postL = new THREE.Mesh(postGeo, timberMat);
+  postL.position.set(-2.5, 1.85, 2.0);
+  postL.castShadow = true;
+  const postR = new THREE.Mesh(postGeo, timberMat);
+  postR.position.set(2.5, 1.85, 2.0);
+  postR.castShadow = true;
+  station.add(postL, postR);
+
+  const topBeam = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.28, 0.32), darkTimberMat);
+  topBeam.position.set(0, 3.3, 2.0);
+  topBeam.castShadow = true;
+  station.add(topBeam);
+
+  // Decorative violet pennants hanging from topBeam
+  [-1.6, 0, 1.6].forEach((bx) => {
+    const banner = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.65, 4), clothBannerMat);
+    banner.position.set(bx, 2.86, 2.0);
+    banner.rotation.z = Math.PI;
+    banner.rotation.y = Math.PI / 4;
+    station.add(banner);
+  });
+
+  // 3. Carved Signboard: "TRAINING STATION"
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 128;
+  const sCtx = signCanvas.getContext('2d');
+  if (sCtx) {
+    sCtx.fillStyle = '#3b0764';
+    sCtx.fillRect(0, 0, 512, 128);
+    sCtx.lineWidth = 8;
+    sCtx.strokeStyle = '#c084fc';
+    sCtx.strokeRect(6, 6, 500, 116);
+    sCtx.fillStyle = '#faf5ff';
+    sCtx.font = 'bold 42px sans-serif';
+    sCtx.textAlign = 'center';
+    sCtx.textBaseline = 'middle';
+    sCtx.fillText('⚔️ PET TRAINING 💎', 256, 64);
+  }
+  const signTex = new THREE.CanvasTexture(signCanvas);
+  const signBoard = new THREE.Mesh(
+    new THREE.BoxGeometry(3.2, 0.72, 0.16),
+    darkTimberMat
+  );
+  signBoard.position.set(0, 3.45, 2.18);
+  station.add(signBoard);
+
+  const signFace = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.0, 0.64),
+    new THREE.MeshBasicMaterial({ map: signTex, transparent: true })
+  );
+  signFace.position.set(0, 3.45, 2.27);
+  station.add(signFace);
+
+  // 4. Two Pet Training Platforms (Raised octagonal/cylinder plinths)
+  const platGeo = new THREE.CylinderGeometry(0.85, 0.98, 0.24, 8);
+  const platRingGeo = new THREE.RingGeometry(0.62, 0.78, 16);
+  const platRimMat = new THREE.MeshBasicMaterial({ color: 0xc084fc, side: THREE.DoubleSide });
+
+  [-1.35, 1.35].forEach((px) => {
+    const plat = new THREE.Mesh(platGeo, darkTimberMat);
+    plat.position.set(px, 0.56, 0.5);
+    plat.castShadow = true;
+    plat.receiveShadow = true;
+    station.add(plat);
+
+    const ring = new THREE.Mesh(platRingGeo, platRimMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(px, 0.69, 0.5);
+    station.add(ring);
+  });
+
+  // 5. Two Straw & Wood Training Dummies with Painted Target Rings
+  const buildDummy = (x: number, z: number, yaw: number) => {
+    const dGroup = new THREE.Group();
+    dGroup.position.set(x, 0.44, z);
+    dGroup.rotation.y = yaw;
+
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 1.45, 6), darkTimberMat);
+    stand.position.y = 0.72;
+    stand.castShadow = true;
+    dGroup.add(stand);
+
+    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.1, 0.1), timberMat);
+    crossbar.position.y = 1.12;
+    dGroup.add(crossbar);
+
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.75, 7), dummyStrawMat);
+    torso.position.y = 1.05;
+    torso.castShadow = true;
+    dGroup.add(torso);
+
+    const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), dummyStrawMat);
+    head.position.y = 1.56;
+    head.castShadow = true;
+    dGroup.add(head);
+
+    const bullseyeOuter = new THREE.Mesh(new THREE.CircleGeometry(0.2, 12), targetRedMat);
+    bullseyeOuter.position.set(0, 1.08, 0.28);
+    const bullseyeInner = new THREE.Mesh(new THREE.CircleGeometry(0.1, 12), targetWhiteMat);
+    bullseyeInner.position.set(0, 1.08, 0.295);
+    dGroup.add(bullseyeOuter, bullseyeInner);
+
+    return dGroup;
+  };
+
+  station.add(buildDummy(-1.55, -1.35, 0.22));
+  station.add(buildDummy(1.55, -1.35, -0.22));
+
+  // 6. Training Equipment: Agility Hurdle & Essence Weight Rack in center-back
+  const hurdlePostL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), timberMat);
+  hurdlePostL.position.set(-0.65, 0.79, -1.65);
+  const hurdlePostR = hurdlePostL.clone();
+  hurdlePostR.position.set(0.65, 0.79, -1.65);
+  const hurdleBar = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.1, 0.1), targetRedMat);
+  hurdleBar.position.set(0, 1.02, -1.65);
+  station.add(hurdlePostL, hurdlePostR, hurdleBar);
+
+  // 7. Decorative Floating Magical Essence Crystals on 4 Stone Pedestals
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0xc084fc,
+    emissive: 0x7e22ce,
+    emissiveIntensity: 0.75,
+    roughness: 0.2,
+    metalness: 0.15,
+  });
+  const crystalPositions: [number, number][] = [
+    [-2.75, -2.0],
+    [2.75, -2.0],
+    [-2.75, 1.3],
+    [2.75, 1.3],
+  ];
+  const pedestalGeo = new THREE.CylinderGeometry(0.26, 0.34, 0.65, 6);
+  const crystalGeo = new THREE.OctahedronGeometry(0.28, 0);
+
+  crystalPositions.forEach(([cx, cz], idx) => {
+    const ped = new THREE.Mesh(pedestalGeo, stoneBaseMat);
+    ped.position.set(cx, 0.72, cz);
+    ped.castShadow = true;
+    station.add(ped);
+
+    const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+    crystal.scale.set(0.85, 1.45, 0.85);
+    crystal.position.set(cx, 1.42, cz);
+    crystal.userData.baseY = 1.42;
+    crystal.userData.phaseOffset = idx * 1.3;
+    crystal.castShadow = true;
+    station.add(crystal);
+    crystals.push(crystal);
+  });
+
+  // Soft purple beacon light over station
+  const crystalLight = new THREE.PointLight(0xc084fc, 1.4, 8.0);
+  crystalLight.position.set(0, 2.5, 0.5);
+  station.add(crystalLight);
+
+  // 8. Front Interaction Zone Glow Pad
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(1.25, 24), padGlowMat);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.set(0, 0.03, 3.6);
+  station.add(pad);
+
+  // 9. Floating 3D Beacon Billboard (clearly visible from bird view)
+  const beaconCanvas = document.createElement('canvas');
+  beaconCanvas.width = 420;
+  beaconCanvas.height = 128;
+  const bCtx = beaconCanvas.getContext('2d');
+  if (bCtx) {
+    bCtx.fillStyle = 'rgba(88, 28, 135, 0.94)';
+    bCtx.beginPath();
+    bCtx.roundRect(8, 8, 404, 112, 28);
+    bCtx.fill();
+    bCtx.lineWidth = 6;
+    bCtx.strokeStyle = '#d8b4fe';
+    bCtx.stroke();
+    bCtx.fillStyle = '#ffffff';
+    bCtx.font = 'bold 38px sans-serif';
+    bCtx.textAlign = 'center';
+    bCtx.textBaseline = 'middle';
+    bCtx.fillText('🏋️ TRAINING STATION', 210, 48);
+    bCtx.fillStyle = '#e9d5ff';
+    bCtx.font = 'bold 24px sans-serif';
+    bCtx.fillText('✨ Upgrade Stats & Skills', 210, 88);
+  }
+  const beaconTex = new THREE.CanvasTexture(beaconCanvas);
+  const beaconSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: beaconTex, transparent: true, depthTest: false })
+  );
+  beaconSprite.scale.set(3.5, 1.1, 1);
+  beaconSprite.position.set(0, 5.2, 0);
+  station.add(beaconSprite);
+
+  return { group: station, crystals };
 }
 
 

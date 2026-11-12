@@ -20,6 +20,8 @@ import {
   HeartPulse,
   ChevronRight,
   Award,
+  Shield,
+  Zap,
 } from 'lucide-react';
 import { PetData, PlayerStats } from '../types/game';
 import { CROPS, getSkillLevelBonus } from '../game/constants';
@@ -50,6 +52,17 @@ const SKILL_ICONS: Record<string, React.FC<{ className?: string }>> = {
   Eye,
   Dumbbell,
   HeartPulse,
+  Shield,
+  Zap,
+};
+
+const FEED_EXP_BY_RARITY: Record<string, number> = {
+  Common: 25,
+  Uncommon: 35,
+  Rare: 50,
+  Epic: 65,
+  Legendary: 80,
+  Mythical: 95,
 };
 
 export const PetInteractionModal: React.FC<PetInteractionModalProps> = ({
@@ -72,11 +85,13 @@ export const PetInteractionModal: React.FC<PetInteractionModalProps> = ({
   // Available edible crops and treats in inventory
   const edibleItems = [
     { id: 'pet_treat', name: 'Pet Treat', icon: '🍖', count: inventory['pet_treat'] || 0, exp: 35 },
-    { id: 'carrot', name: 'Sweet Carrot', icon: '🥕', count: inventory['carrot'] || 0, exp: 30 },
-    { id: 'tomato', name: 'Juicy Tomato', icon: '🍅', count: inventory['tomato'] || 0, exp: 30 },
-    { id: 'strawberry', name: 'Sugar Berry', icon: '🍓', count: inventory['strawberry'] || 0, exp: 35 },
-    { id: 'corn', name: 'Golden Corn', icon: '🌽', count: inventory['corn'] || 0, exp: 40 },
-    { id: 'pumpkin', name: 'Harvest Pumpkin', icon: '🎃', count: inventory['pumpkin'] || 0, exp: 50 },
+    ...Object.values(CROPS).map((crop) => ({
+      id: crop.id,
+      name: crop.name,
+      icon: crop.emoji,
+      count: inventory[crop.id] || 0,
+      exp: FEED_EXP_BY_RARITY[crop.rarity] || 30,
+    })),
   ];
 
   const handleFeed = (foodId: string) => {
@@ -301,7 +316,7 @@ export const PetInteractionModal: React.FC<PetInteractionModalProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 max-h-48 overflow-y-auto pr-1">
                 {edibleItems.map((item) => (
                   <button
                     key={item.id}

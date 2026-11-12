@@ -14,10 +14,20 @@ import {
   Wind,
   Shield,
   CheckCircle2,
+  Flame,
 } from 'lucide-react';
-import { PlayerStats, NourishmentBonuses } from '../types/game';
+import { PlayerStats, NourishmentBonuses, MissionEventType, PetRarity } from '../types/game';
 import { CROPS, NOURISHMENT_CONFIGS } from '../game/constants';
 import { soundEngine } from '../audio/soundEngine';
+
+const RARITY_BADGE_STYLE: Record<PetRarity, string> = {
+  Common: 'bg-stone-800 text-stone-300 border-stone-600/60',
+  Uncommon: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50',
+  Rare: 'bg-sky-950/80 text-sky-300 border-sky-500/50',
+  Epic: 'bg-purple-950/80 text-purple-300 border-purple-500/50',
+  Legendary: 'bg-amber-950/80 text-amber-300 border-amber-500/60',
+  Mythical: 'bg-rose-950/80 text-rose-300 border-rose-500/60',
+};
 
 interface InventoryModalProps {
   inventory: Record<string, number>;
@@ -28,6 +38,7 @@ interface InventoryModalProps {
   onShowMessage: (msg: string) => void;
   onConsumeCrop?: (cropId: string, count?: number) => void;
   initialTab?: 'inventory' | 'shop' | 'nourishment';
+  onMissionEvent?: (eventType: MissionEventType, amount?: number, trackKey?: string) => void;
 }
 
 export const InventoryModal: React.FC<InventoryModalProps> = ({
@@ -39,6 +50,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
   onShowMessage,
   onConsumeCrop,
   initialTab = 'inventory',
+  onMissionEvent,
 }) => {
   const [activeTab, setActiveTab] = useState<'inventory' | 'shop' | 'nourishment'>(initialTab);
   const [confirmConsumeCropId, setConfirmConsumeCropId] = useState<string | null>(null);
@@ -55,6 +67,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
     onUpdatePlayer((prev) => ({ ...prev, gold: prev.gold + unitPrice }));
     soundEngine.playHarvest();
     onShowMessage(`Sold 1x ${cropDef?.name || cropId} for +${unitPrice} Gold!`);
+    onMissionEvent?.('earn_farm_coins', unitPrice);
+    onMissionEvent?.('earn_coins', unitPrice);
   };
 
   const handleTriggerConsume = (cropId: string) => {
@@ -189,10 +203,19 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                             className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shadow"
                             style={{ backgroundColor: crop.color + '33', border: `1px solid ${crop.color}` }}
                           >
-                            {cfg?.icon || '🥕'}
+                            {crop.emoji || cfg?.icon || '🌱'}
                           </div>
                           <div>
-                            <h4 className="text-xs font-bold text-white">{crop.name}</h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="text-xs font-bold text-white">{crop.name}</h4>
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                  RARITY_BADGE_STYLE[crop.rarity]
+                                }`}
+                              >
+                                {crop.rarity}
+                              </span>
+                            </div>
                             <p className="text-[11px] text-stone-400">Owned: {count}</p>
                             {cropBonus && (
                               <p className="text-[9.5px] text-emerald-400/90 font-medium">{cropBonus}</p>
@@ -238,21 +261,33 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                 <h3 className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-3">Seeds & Materials</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Object.entries(inventory)
-                    .filter(([key]) => !['carrot', 'tomato', 'strawberry', 'corn', 'pumpkin'].includes(key))
+                    .filter(([key]) => !Object.prototype.hasOwnProperty.call(CROPS, key))
                     .map(([itemId, count]) => {
-                      const displayName = itemId.replace('seed_', '').replace('_', ' ').toUpperCase();
+                      const seedCropId = itemId.startsWith('seed_') ? itemId.replace('seed_', '') : null;
+                      const seedCrop = seedCropId ? CROPS[seedCropId] : null;
+                      const displayName = seedCrop
+                        ? `${seedCrop.name} Seed`
+                        : itemId.replace('seed_', '').replace(/_/g, ' ').toUpperCase();
                       return (
                         <div
                           key={itemId}
-                          className="bg-stone-900/60 border border-stone-800 rounded-2xl p-3 flex items-center justify-between"
+                          className="bg-stone-900/60 border border-stone-800 rounded-2xl p-3 flex items-center justify-between gap-2"
                         >
-                          <div className="flex items-center gap-2.5">
-                            <span className="text-lg">
-                              {itemId.startsWith('seed') ? '🌱' : itemId === 'stone' ? '🪨' : itemId === 'wood' ? '🪵' : '🍖'}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-lg shrink-0">
+                              {seedCrop
+                                ? seedCrop.emoji
+                                : itemId.startsWith('seed')
+                                ? '🌱'
+                                : itemId === 'stone'
+                                ? '🪨'
+                                : itemId === 'wood'
+                                ? '🪵'
+                                : '🍖'}
                             </span>
-                            <span className="text-xs font-semibold text-stone-200">{displayName}</span>
+                            <span className="text-xs font-semibold text-stone-200 truncate">{displayName}</span>
                           </div>
-                          <span className="text-xs font-bold text-amber-400 px-2 py-0.5 rounded-md bg-stone-800">
+                          <span className="text-xs font-bold text-amber-400 px-2 py-0.5 rounded-md bg-stone-800 shrink-0">
                             x{count}
                           </span>
                         </div>
@@ -264,9 +299,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
           ) : activeTab === 'nourishment' ? (
             <div className="space-y-5">
               {/* Stats overview banner */}
-              <div className="bg-stone-950/80 border border-stone-800 rounded-2xl p-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="bg-stone-950/80 border border-stone-800 rounded-2xl p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                 <div className="flex items-center gap-2">
-                  <Heart className="w-4 h-4 text-rose-400" />
+                  <Heart className="w-4 h-4 text-rose-400 shrink-0" />
                   <div>
                     <div className="text-[10px] text-stone-400 font-bold uppercase">Max HP</div>
                     <div className="text-xs font-black text-rose-200">
@@ -275,7 +310,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-400" />
+                  <Zap className="w-4 h-4 text-amber-400 shrink-0" />
                   <div>
                     <div className="text-[10px] text-stone-400 font-bold uppercase">Attack</div>
                     <div className="text-xs font-black text-amber-200">
@@ -284,7 +319,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-purple-400" />
+                  <Target className="w-4 h-4 text-purple-400 shrink-0" />
                   <div>
                     <div className="text-[10px] text-stone-400 font-bold uppercase">Crit Rate</div>
                     <div className="text-xs font-black text-purple-200">
@@ -293,7 +328,25 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Wind className="w-4 h-4 text-sky-400" />
+                  <Flame className="w-4 h-4 text-orange-400 shrink-0" />
+                  <div>
+                    <div className="text-[10px] text-stone-400 font-bold uppercase">Crit Dmg</div>
+                    <div className="text-xs font-black text-orange-200">
+                      +{(player.nourishment?.critDamagePct || 0).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div>
+                    <div className="text-[10px] text-stone-400 font-bold uppercase">Skill Dmg</div>
+                    <div className="text-xs font-black text-cyan-200">
+                      +{(player.nourishment?.skillDamagePct || 0).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Wind className="w-4 h-4 text-sky-400 shrink-0" />
                   <div>
                     <div className="text-[10px] text-stone-400 font-bold uppercase">Speed</div>
                     <div className="text-xs font-black text-sky-200">
@@ -301,8 +354,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 col-span-2 sm:col-span-1">
-                  <Shield className="w-4 h-4 text-emerald-400" />
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
                   <div>
                     <div className="text-[10px] text-stone-400 font-bold uppercase">Defense</div>
                     <div className="text-xs font-black text-emerald-200">
@@ -316,7 +369,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
               <div className="space-y-3">
                 {Object.values(NOURISHMENT_CONFIGS).map((cfg) => {
                   const owned = inventory[cfg.cropId] || 0;
-                  const currentBonus = player.nourishment?.[cfg.statKey] || 0;
+                  const currentBonus = player.nourishment?.[cfg.statKey] ?? 0;
                   const isMaxed = currentBonus >= cfg.maxBonus;
                   const pct = Math.min(100, (currentBonus / cfg.maxBonus) * 100);
 
@@ -329,8 +382,15 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                         <div className="flex items-center gap-3">
                           <span className="text-2xl">{cfg.icon}</span>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <h4 className="text-xs font-bold text-white">{cfg.name}</h4>
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                  RARITY_BADGE_STYLE[cfg.rarity]
+                                }`}
+                              >
+                                {cfg.rarity}
+                              </span>
                               <span className="text-[10px] bg-stone-800 text-amber-300 font-semibold px-2 py-0.2 rounded-full">
                                 {owned} in bag
                               </span>
@@ -388,11 +448,22 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-lg">
-                          🌱
+                          {crop.emoji}
                         </div>
                         <div>
-                          <h4 className="text-xs font-bold text-white">{crop.name} Seed</h4>
-                          <p className="text-[10px] text-stone-400">Grows in {crop.growTimeSeconds}s</p>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="text-xs font-bold text-white">{crop.name} Seed</h4>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                RARITY_BADGE_STYLE[crop.rarity]
+                              }`}
+                            >
+                              {crop.rarity}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-stone-400">
+                            Grows in {crop.growTimeSeconds}s • Sell {crop.sellPrice}g
+                          </p>
                         </div>
                       </div>
 

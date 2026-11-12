@@ -1,9 +1,60 @@
 import { PetData } from '../types/game';
+import {
+  getActiveSkillEnhancementBonuses,
+  getPassiveEnhancementMultiplier,
+} from './petStats';
 
 export interface MilestoneInfo {
   level: number;
   title: string;
   effect: string;
+}
+
+export interface PetBasicAttackConfig {
+  name: string;
+  isRanged: boolean;
+  attackRange: number;
+  attackInterval: number;
+  damageMultiplier: number;
+  animDuration: number;
+}
+
+export const PET_BASIC_ATTACK_STATS: Record<string, PetBasicAttackConfig> = {
+  fox: { name: 'Fire Claw', isRanged: false, attackRange: 1.45, attackInterval: 1.05, damageMultiplier: 1.0, animDuration: 0.48 },
+  turtle: { name: 'Shell Bash', isRanged: false, attackRange: 1.45, attackInterval: 1.15, damageMultiplier: 0.95, animDuration: 0.54 },
+  rabbit: { name: 'Quick Kick', isRanged: false, attackRange: 1.45, attackInterval: 0.9, damageMultiplier: 0.95, animDuration: 0.44 },
+  owl: { name: 'Gale Feather', isRanged: true, attackRange: 3.6, attackInterval: 1.25, damageMultiplier: 1.0, animDuration: 0.5 },
+  bear: { name: 'Heavy Paw', isRanged: false, attackRange: 1.55, attackInterval: 1.25, damageMultiplier: 1.2, animDuration: 0.58 },
+  slime: { name: 'Nectar Bolt', isRanged: true, attackRange: 3.6, attackInterval: 1.2, damageMultiplier: 0.95, animDuration: 0.48 },
+  wolf: { name: 'Moon Fang', isRanged: false, attackRange: 1.5, attackInterval: 1.0, damageMultiplier: 1.05, animDuration: 0.48 },
+  frog: { name: 'Splash Snap', isRanged: false, attackRange: 1.6, attackInterval: 1.05, damageMultiplier: 1.0, animDuration: 0.48 },
+  deer: { name: 'Hoof Strike', isRanged: false, attackRange: 1.5, attackInterval: 1.05, damageMultiplier: 0.95, animDuration: 0.48 },
+  dragon: { name: 'Starfire Bolt', isRanged: true, attackRange: 3.8, attackInterval: 1.25, damageMultiplier: 1.25, animDuration: 0.5 },
+  phoenix: { name: 'Solar Bolt', isRanged: true, attackRange: 3.8, attackInterval: 1.25, damageMultiplier: 1.25, animDuration: 0.5 },
+  // 10 New Expansion Pets
+  red_panda: { name: 'Quick Claw Swipe', isRanged: false, attackRange: 1.5, attackInterval: 0.95, damageMultiplier: 0.95, animDuration: 0.45 },
+  timber_wolf: { name: 'Bite', isRanged: false, attackRange: 1.55, attackInterval: 0.92, damageMultiplier: 1.12, animDuration: 0.46 },
+  sylvan_deer: { name: 'Antler Strike', isRanged: false, attackRange: 1.6, attackInterval: 1.08, damageMultiplier: 0.98, animDuration: 0.5 },
+  penguin: { name: 'Beak Strike', isRanged: false, attackRange: 1.45, attackInterval: 0.98, damageMultiplier: 1.0, animDuration: 0.46 },
+  bat: { name: 'Sonic Projectile', isRanged: true, attackRange: 4.0, attackInterval: 1.1, damageMultiplier: 1.02, animDuration: 0.48 },
+  poison_frog: { name: 'Tongue Strike', isRanged: false, attackRange: 2.1, attackInterval: 1.02, damageMultiplier: 1.02, animDuration: 0.48 },
+  hedgehog: { name: 'Short Headbutt', isRanged: false, attackRange: 1.45, attackInterval: 1.05, damageMultiplier: 1.05, animDuration: 0.48 },
+  bee: { name: 'Honey Projectile', isRanged: true, attackRange: 4.2, attackInterval: 0.92, damageMultiplier: 0.92, animDuration: 0.42 },
+  dragon_whelp: { name: 'Small Fireball', isRanged: true, attackRange: 3.8, attackInterval: 1.15, damageMultiplier: 1.18, animDuration: 0.5 },
+  capybara: { name: 'Gentle Body Bump', isRanged: false, attackRange: 1.45, attackInterval: 1.2, damageMultiplier: 0.9, animDuration: 0.52 },
+};
+
+export function getPetBasicAttackConfig(species: string): PetBasicAttackConfig {
+  return (
+    PET_BASIC_ATTACK_STATS[species] || {
+      name: 'Basic Strike',
+      isRanged: false,
+      attackRange: 1.45,
+      attackInterval: 1.05,
+      damageMultiplier: 1.0,
+      animDuration: 0.48,
+    }
+  );
 }
 
 export interface PetCombatConfig {
@@ -412,6 +463,357 @@ export const PET_COMBAT_CONFIGS: Record<string, PetCombatConfig> = {
       ],
     },
   },
+
+  // --- 10 NEW EXPANSION PETS ---
+  pet_red_panda: {
+    species: 'red_panda',
+    name: 'Red Panda',
+    role: 'Support / Healing',
+    active: {
+      id: 'skill_healing_leaves',
+      name: 'Healing Leaves',
+      icon: 'HeartPulse',
+      baseCooldown: 12,
+      description: 'Creates an area that gradually heals the player.',
+      milestones: [
+        { level: 1, title: 'Leaf Sanctuary', effect: 'Summons a 5s leaf grove restoring 12 HP/sec and dealing 40 nature damage.' },
+        { level: 10, title: 'Herbal Breeze', effect: 'Heal ticks increase to 17 HP/sec; radius expands to 6.5m.' },
+        { level: 20, title: 'Soothing Petals', effect: 'Duration increases to 6s; grants +15% movement speed inside the grove.' },
+        { level: 30, title: 'Reviving Canopy', effect: 'Heal ticks reach 24 HP/sec and cleanse slow effects.' },
+        { level: 40, title: 'Evergreen Bloom', effect: 'Burst-heals 55 HP on cast plus 30 HP/sec over 6.5s.' },
+        { level: 50, title: 'Elder Bamboo Grove', effect: 'Restores 40 HP/sec across 8m, deals 180 area damage, cooldown 8.5s.' },
+      ],
+    },
+    passive: {
+      id: 'passive_gentle_nature',
+      name: 'Gentle Nature',
+      icon: 'HeartHandshake',
+      description: 'Increases healing received.',
+      milestones: [
+        { level: 1, title: 'Warm Care', effect: 'Increases all healing received by +15%.' },
+        { level: 10, title: 'Tender Touch', effect: 'Healing received bonus increases to +22%.' },
+        { level: 20, title: 'Tranquil Spirit', effect: 'Healing received +28%; healing skills also grant +10% defense for 3s.' },
+        { level: 30, title: 'Blossom Grace', effect: 'Healing received +35%.' },
+        { level: 40, title: 'Verdant Aura', effect: 'Healing received +42%; restores 10 bonus HP after every wave.' },
+        { level: 50, title: 'Spirit of Serenity', effect: 'Healing received +50% and excess healing converts into a temporary barrier.' },
+      ],
+    },
+  },
+
+  pet_timber_wolf: {
+    species: 'timber_wolf',
+    name: 'Timber Wolf',
+    role: 'Physical Damage',
+    active: {
+      id: 'skill_pack_assault',
+      name: 'Pack Assault',
+      icon: 'Flame',
+      baseCooldown: 9,
+      description: 'Performs a powerful forward charge.',
+      milestones: [
+        { level: 1, title: 'Feral Charge', effect: 'Charges forward dealing 105 physical damage along the path.' },
+        { level: 10, title: 'Savage Lunge', effect: 'Charge damage increases to 145 and knocks enemies back.' },
+        { level: 20, title: 'Twin Fangs', effect: 'Follows charge with a sweeping fang cleave for +55 damage.' },
+        { level: 30, title: 'Alpha Momentum', effect: 'Cooldown reduced to 7s; gains +25% bonus damage if charging 1 target.' },
+        { level: 40, title: 'Predator Rush', effect: 'Deals 250 physical damage and briefly stuns impacted enemies.' },
+        { level: 50, title: 'Apex Rampage', effect: 'Deals 340 crushing physical damage across a wide charge lane.' },
+      ],
+    },
+    passive: {
+      id: 'passive_hunters_instinct',
+      name: "Hunter's Instinct",
+      icon: 'Eye',
+      description: 'Increases damage against isolated enemies.',
+      milestones: [
+        { level: 1, title: 'Lone Prey', effect: '+20% damage against isolated enemies (no other foes within 4m).' },
+        { level: 10, title: 'Stalking Gaze', effect: 'Isolated enemy damage bonus increases to +28%.' },
+        { level: 20, title: 'Cornered Quarry', effect: '+34% damage and +15% crit chance vs isolated targets.' },
+        { level: 30, title: 'Relentless Fang', effect: 'Isolated bonus increases to +40%.' },
+        { level: 40, title: 'Ruthless Pursuit', effect: '+46% damage against isolated enemies; +15% move speed.' },
+        { level: 50, title: 'Apex Stalker', effect: '+55% damage and guaranteed 1.8x critical strike chance boost vs isolated foes.' },
+      ],
+    },
+  },
+
+  pet_sylvan_deer: {
+    species: 'sylvan_deer',
+    name: 'Sylvan Deer',
+    role: 'Support / Defense',
+    active: {
+      id: 'skill_natures_blessing',
+      name: "Nature's Blessing",
+      icon: 'ShieldCheck',
+      baseCooldown: 13,
+      description: 'Creates a protective nature field.',
+      milestones: [
+        { level: 1, title: 'Ward of Leaves', effect: 'Creates a 5s protective field granting +60 barrier and 25% damage reduction.' },
+        { level: 10, title: 'Rooted Sanctuary', effect: 'Barrier increases to +95; field slows enemies entering by 25%.' },
+        { level: 20, title: 'Bough Canopy', effect: 'Field lasts 6s and grants +30% damage reduction.' },
+        { level: 30, title: 'Ancient Bark', effect: 'Restores 35 HP on cast and grants +130 barrier.' },
+        { level: 40, title: 'Grove Bastion', effect: 'Field deals 60 pulsing nature damage to encroaching foes.' },
+        { level: 50, title: 'Heartwood Aegis', effect: '+220 barrier, 40% damage reduction for 7s, 9s cooldown.' },
+      ],
+    },
+    passive: {
+      id: 'passive_forest_guardian',
+      name: 'Forest Guardian',
+      icon: 'Shield',
+      description: 'Improves player defense.',
+      milestones: [
+        { level: 1, title: 'Bark Skin', effect: 'Reduces all incoming damage by 12%.' },
+        { level: 10, title: 'Oakguard', effect: 'Defense bonus increases to 16% incoming damage reduction.' },
+        { level: 20, title: 'Thicket Ward', effect: '20% damage reduction and +15 max HP.' },
+        { level: 30, title: 'Elderwood Mail', effect: '24% damage reduction against all attacks.' },
+        { level: 40, title: 'Sylvan Bulwark', effect: '28% damage reduction; reduces boss hit burst.' },
+        { level: 50, title: 'Immortal Sentinel', effect: 'Permanent 34% incoming damage reduction.' },
+      ],
+    },
+  },
+
+  pet_penguin: {
+    species: 'penguin',
+    name: 'Penguin',
+    role: 'Control / Ice',
+    active: {
+      id: 'skill_frozen_slide',
+      name: 'Frozen Slide',
+      icon: 'Droplets',
+      baseCooldown: 9,
+      description: 'Slides forward, damaging and slowing enemies.',
+      milestones: [
+        { level: 1, title: 'Glacier Dash', effect: 'Slides forward dealing 85 frost damage and slowing hit foes by 40% for 3.5s.' },
+        { level: 10, title: 'Permafrost Wake', effect: 'Damage 120; slow strength increases to 50%.' },
+        { level: 20, title: 'Frostbite Trail', effect: 'Leaves an icy trail for 4s that chills chasing enemies.' },
+        { level: 30, title: 'Icebreaker', effect: 'Cooldown reduced to 7s; deals +35% bonus damage to slowed enemies.' },
+        { level: 40, title: 'Blizzard Glide', effect: 'Deals 210 frost damage and freezes enemies briefly (0.8s stun).' },
+        { level: 50, title: 'Polar Avalanche', effect: '295 damage, 65% slow for 4.5s, 1.2s freeze stun.' },
+      ],
+    },
+    passive: {
+      id: 'passive_chilly_presence',
+      name: 'Chilly Presence',
+      icon: 'Wind',
+      description: 'Improves damage against slowed enemies.',
+      milestones: [
+        { level: 1, title: 'Frostbite', effect: '+20% damage against slowed enemies.' },
+        { level: 10, title: 'Biting Gale', effect: '+28% damage against slowed enemies.' },
+        { level: 20, title: 'Rime Shatter', effect: '+34% damage against slowed enemies; extends slow durations by +25%.' },
+        { level: 30, title: 'Deep Freeze', effect: '+40% damage against slowed enemies.' },
+        { level: 40, title: 'Glacial Focus', effect: '+46% damage and +15% crit chance vs slowed foes.' },
+        { level: 50, title: 'Absolute Zero', effect: '+55% damage against slowed enemies.' },
+      ],
+    },
+  },
+
+  pet_bat: {
+    species: 'bat',
+    name: 'Bat',
+    role: 'Ranged / Lifesteal',
+    active: {
+      id: 'skill_blood_echo',
+      name: 'Blood Echo',
+      icon: 'Zap',
+      baseCooldown: 11,
+      description: 'Releases an energy wave that damages enemies and restores some player health.',
+      milestones: [
+        { level: 1, title: 'Crimson Pulse', effect: 'Emits a sonic wave dealing 90 damage and restoring 28 HP (+8 HP per hit enemy).' },
+        { level: 10, title: 'Vampiric Resonance', effect: 'Wave damage 125; restores 38 HP + 10 HP per hit enemy.' },
+        { level: 20, title: 'Echoing Drain', effect: 'Wave radius expands to 7.5m; weakens enemies for 3s.' },
+        { level: 30, title: 'Nightmare Shriek', effect: 'Cooldown reduced to 8.5s; heals 50 HP + 12 HP per hit enemy.' },
+        { level: 40, title: 'Sanguine Surge', effect: 'Deals 220 damage and restores up to 110 HP.' },
+        { level: 50, title: 'Nocturnal Eclipse', effect: '300 sonic damage across 9m, massive lifesteal recovery.' },
+      ],
+    },
+    passive: {
+      id: 'passive_night_hunter',
+      name: 'Night Hunter',
+      icon: 'Eye',
+      description: 'Improves damage against weakened enemies.',
+      milestones: [
+        { level: 1, title: 'Blood Scent', effect: '+20% damage against weakened enemies (below 60% HP or afflicted).' },
+        { level: 10, title: 'Dusk Stalker', effect: '+28% damage against weakened enemies.' },
+        { level: 20, title: 'Twilight Fang', effect: '+34% damage vs weakened enemies and +5% lifesteal on skills.' },
+        { level: 30, title: 'Shadow Predator', effect: '+40% damage against weakened enemies.' },
+        { level: 40, title: 'Crimson Precision', effect: '+46% damage against weakened enemies.' },
+        { level: 50, title: 'Lord of Dusk', effect: '+55% damage vs weakened foes and skills restore bonus HP on kill.' },
+      ],
+    },
+  },
+
+  pet_poison_frog: {
+    species: 'poison_frog',
+    name: 'Venom Frog',
+    role: 'Control / Poison',
+    active: {
+      id: 'skill_toxic_tongue',
+      name: 'Toxic Tongue',
+      icon: 'Droplets',
+      baseCooldown: 10,
+      description: 'Strikes an enemy and creates a damaging poison area.',
+      milestones: [
+        { level: 1, title: 'Venom Lash', effect: 'Strikes for 80 damage and spawns a 4.5s poison mire (22 dmg/tick + slow).' },
+        { level: 10, title: 'Bog Acid', effect: 'Strike damage 115; poison ticks deal 30 damage.' },
+        { level: 20, title: 'Noxious Cloud', effect: 'Poison pool radius expands to 5.5m and slows foes by 40%.' },
+        { level: 30, title: 'Corrosive Spit', effect: 'Poisoned foes take +15% increased damage.' },
+        { level: 40, title: 'Mire Eruption', effect: 'Initial strike deals 195 damage; pool lasts 6s.' },
+        { level: 50, title: 'Plague Marsh', effect: '280 strike damage + massive 6s toxic zone dealing 55 dmg/tick.' },
+      ],
+    },
+    passive: {
+      id: 'passive_poison_resistance',
+      name: 'Poison Resistance',
+      icon: 'ShieldCheck',
+      description: 'Reduces incoming poison damage.',
+      milestones: [
+        { level: 1, title: 'Toxin Filter', effect: 'Reduces incoming poison/hazard damage by 35% and general hits by 8%.' },
+        { level: 10, title: 'Antivenom Gland', effect: 'Poison/hazard damage reduced by 45%; general damage reduced by 11%.' },
+        { level: 20, title: 'Alchemical Skin', effect: 'Poison/hazard damage reduced by 55%; general damage reduced by 14%.' },
+        { level: 30, title: 'Immunity Serum', effect: 'Poison/hazard damage reduced by 65%; general damage reduced by 17%.' },
+        { level: 40, title: 'Venom Ward', effect: 'Poison/hazard damage reduced by 75%; general damage reduced by 20%.' },
+        { level: 50, title: 'Pure Antidote', effect: '85% poison/hazard resistance and 24% general damage mitigation.' },
+      ],
+    },
+  },
+
+  pet_hedgehog: {
+    species: 'hedgehog',
+    name: 'Hedgehog',
+    role: 'Defense / Counterattack',
+    active: {
+      id: 'skill_spiky_roll',
+      name: 'Spiky Roll',
+      icon: 'Hammer',
+      baseCooldown: 8,
+      description: 'Rolls forward, damaging enemies along its path.',
+      milestones: [
+        { level: 1, title: 'Quill Dash', effect: 'Rolls forward dealing 95 damage and knocking enemies aside.' },
+        { level: 10, title: 'Iron Spines', effect: 'Roll damage increases to 135; briefly grants +40 shield.' },
+        { level: 20, title: 'Pinwheel Impact', effect: 'Cooldown reduced to 6.5s; radius widens.' },
+        { level: 30, title: 'Needle Scatter', effect: 'Fires quills at roll end dealing 65 extra area damage.' },
+        { level: 40, title: 'Armored Juggernaut', effect: 'Deals 225 damage and stuns enemies for 1s.' },
+        { level: 50, title: 'Steel Tempest Roll', effect: '310 damage, 5s cooldown, +100 shield on roll.' },
+      ],
+    },
+    passive: {
+      id: 'passive_thorny_hide',
+      name: 'Thorny Hide',
+      icon: 'Shield',
+      description: 'Improves player defense against nearby enemies.',
+      milestones: [
+        { level: 1, title: 'Bristled Quills', effect: 'Reduces damage from nearby enemies (within 3.5m) by 18% and reflects 15%.' },
+        { level: 10, title: 'Barbed Coat', effect: 'Close-range defense +24%; reflects 22% melee damage.' },
+        { level: 20, title: 'Spiked Carapace', effect: 'Close-range defense +28%; reflects 28% damage.' },
+        { level: 30, title: 'Iron Briars', effect: 'Close-range defense +32%; reflects 35% damage.' },
+        { level: 40, title: 'Quill Counter', effect: 'Close-range defense +36%; attackers are slowed briefly.' },
+        { level: 50, title: 'Fortress of Needles', effect: 'Reduces nearby enemy damage by 42% and reflects 50% back.' },
+      ],
+    },
+  },
+
+  pet_bee: {
+    species: 'bee',
+    name: 'Bee',
+    role: 'Ranged / Speed',
+    active: {
+      id: 'skill_honey_barrage',
+      name: 'Honey Barrage',
+      icon: 'Sparkles',
+      baseCooldown: 8,
+      description: 'Fires several magical honey projectiles.',
+      milestones: [
+        { level: 1, title: 'Nectar Volley', effect: 'Fires 5 golden honey bolts for 30 damage each (150 total) and slows targets.' },
+        { level: 10, title: 'Royal Swarm', effect: 'Fires 6 honey bolts dealing 38 damage each (228 total).' },
+        { level: 20, title: 'Sticky Glaze', effect: 'Bolts slow enemies by 40% for 3s; cooldown 6.5s.' },
+        { level: 30, title: 'Pollen Burst', effect: 'Fires 7 bolts with small splash detonations on hit.' },
+        { level: 40, title: 'Golden Hail', effect: 'Fires 8 bolts for 52 damage each.' },
+        { level: 50, title: 'Queen’s Barrage', effect: 'Unleashes 9 homing honey bolts for 65 damage each (585 total).' },
+      ],
+    },
+    passive: {
+      id: 'passive_swift_wings',
+      name: 'Swift Wings',
+      icon: 'Wind',
+      description: 'Improves player movement speed.',
+      milestones: [
+        { level: 1, title: 'Tailwind', effect: 'Increases player movement speed by +12%.' },
+        { level: 10, title: 'Darting Flight', effect: 'Increases movement speed by +16%.' },
+        { level: 20, title: 'Humming Tempo', effect: 'Increases movement speed by +20%.' },
+        { level: 30, title: 'Bumble Breeze', effect: 'Increases movement speed by +24% and trims skill cooldowns slightly.' },
+        { level: 40, title: 'Zephyr Wings', effect: 'Increases movement speed by +28%.' },
+        { level: 50, title: 'Supersonic Hive', effect: 'Increases player movement speed by +34%.' },
+      ],
+    },
+  },
+
+  pet_dragon_whelp: {
+    species: 'dragon_whelp',
+    name: 'Dragon Whelp',
+    role: 'Fire / Burst Damage',
+    active: {
+      id: 'skill_ember_breath',
+      name: 'Ember Breath',
+      icon: 'Flame',
+      baseCooldown: 10,
+      description: 'Breathes fire in a cone.',
+      milestones: [
+        { level: 1, title: 'Cinder Cone', effect: 'Breathes fire in a 7m forward cone dealing 125 fire damage and burning foes.' },
+        { level: 10, title: 'Scorching Jet', effect: 'Cone range 8m; deals 175 fire damage with stronger burn DoT.' },
+        { level: 20, title: 'Molten Gust', effect: 'Cooldown reduced to 8s; cone widens and staggers hit foes.' },
+        { level: 30, title: 'Blaze Flare', effect: 'Deals 250 fire damage and melts enemy defenses.' },
+        { level: 40, title: 'Wyrmfire Surge', effect: 'Deals 330 fire damage across a 9m blazing arc.' },
+        { level: 50, title: 'Infernal Hatchling', effect: '450 burst fire damage in a wide cone, scorching all foes for 5s.' },
+      ],
+    },
+    passive: {
+      id: 'passive_dragon_heart',
+      name: 'Dragon Heart',
+      icon: 'Sun',
+      description: 'Improves player fire damage.',
+      milestones: [
+        { level: 1, title: 'Kindled Core', effect: 'Increases all player fire skill & burn damage by +20%.' },
+        { level: 10, title: 'Ember Pulse', effect: 'Fire damage increased by +28%.' },
+        { level: 20, title: 'Searing Blood', effect: 'Fire damage increased by +35%; burn duration +1s.' },
+        { level: 30, title: 'Flame Resonance', effect: 'Fire damage increased by +42%.' },
+        { level: 40, title: 'Pyre Heart', effect: 'Fire damage increased by +50%.' },
+        { level: 50, title: 'Primordial Furnace', effect: 'Fire damage increased by +65% and burns ignite adjacent enemies.' },
+      ],
+    },
+  },
+
+  pet_capybara: {
+    species: 'capybara',
+    name: 'Capybara',
+    role: 'Support / Defense',
+    active: {
+      id: 'skill_calm_aura',
+      name: 'Calm Aura',
+      icon: 'ShieldCheck',
+      baseCooldown: 14,
+      description: 'Creates an area that reduces damage received.',
+      milestones: [
+        { level: 1, title: 'Tranquil Zone', effect: 'Creates a 5s calm sanctuary reducing damage received by 30% and healing 20 HP.' },
+        { level: 10, title: 'Hot Spring Mist', effect: 'Damage reduction increases to 36%; restores 35 HP.' },
+        { level: 20, title: 'Zen Ripple', effect: 'Aura lasts 6s across 6.5m and gently pushes aggressive enemies back.' },
+        { level: 30, title: 'Serene Sanctuary', effect: 'Damage reduction 42%; heals 12 HP/sec inside.' },
+        { level: 40, title: 'Unbothered', effect: 'Damage reduction 48%; grants stagger immunity inside aura.' },
+        { level: 50, title: 'Nirvana Oasis', effect: '55% damage reduction for 7s, restores 120 HP total, 10s cooldown.' },
+      ],
+    },
+    passive: {
+      id: 'passive_peaceful_companion',
+      name: 'Peaceful Companion',
+      icon: 'HeartHandshake',
+      description: 'Gradually improves player health recovery outside combat.',
+      milestones: [
+        { level: 1, title: 'Cozy Rest', effect: 'After 3s without taking damage, restores 5 HP every 2s.' },
+        { level: 10, title: 'Easygoing', effect: 'Out-of-combat recovery increases to 8 HP every 2s.' },
+        { level: 20, title: 'Warm Presence', effect: 'Out-of-combat delay reduced to 2.5s; heals 11 HP every 2s.' },
+        { level: 30, title: 'Meadow Nap', effect: 'Also restores +2 HP/sec passively and +15 Max HP.' },
+        { level: 40, title: 'Tranquil Bond', effect: 'Out-of-combat recovery reaches 16 HP every 2s.' },
+        { level: 50, title: 'Master of Chill', effect: 'Restores 22 HP every 2s outside combat and boosts all recovery by +20%.' },
+      ],
+    },
+  },
 };
 
 /**
@@ -454,15 +856,32 @@ export function formatSkillLevelBonus(petId: string, skillType: 'active' | 'pass
 }
 
 /**
- * Computes dynamic combat scaling based on pet level
+ * Computes passive skill effectiveness multiplier from Pet Training Passive Skill Enhancement level.
  */
-export function computeActiveSkillStats(petId: string, level: number) {
+export function computePassiveEnhancementMultiplier(passiveEnhancementLevel: number = 0): number {
+  return getPassiveEnhancementMultiplier(passiveEnhancementLevel);
+}
+
+/**
+ * Computes dynamic combat scaling based on pet level and Active Skill Enhancement level (0..5)
+ */
+export function computeActiveSkillStats(
+  petId: string,
+  level: number,
+  activeEnhancementLevel: number = 0
+) {
   const cfg = PET_COMBAT_CONFIGS[petId];
+  const enh = getActiveSkillEnhancementBonuses(activeEnhancementLevel);
+  const scalePower = (v: number) => Math.round(v * enh.powerMultiplier);
+  const scaleRadius = (v: number) => Number((v * enh.areaMultiplier).toFixed(2));
+  const scaleCd = (v: number, floor: number) =>
+    Math.max(Number((floor * enh.cooldownMultiplier).toFixed(1)), Math.round(v * enh.cooldownMultiplier * 10) / 10);
+
   if (!cfg) {
     return {
-      damage: 80 + level * 10,
-      cooldown: 10,
-      radius: 5,
+      damage: scalePower(80 + level * 10),
+      cooldown: scaleCd(10, 4.0),
+      radius: scaleRadius(5),
       heal: 0,
       shield: 0,
       stunDuration: 0,
@@ -476,10 +895,10 @@ export function computeActiveSkillStats(petId: string, level: number) {
   switch (petId) {
     case 'pet_fox':
       return {
-        damage: Math.round(90 + level * 4.6), // 90 -> 320 at Lv 50
-        cooldown: Math.max(5.0, calculatedCd),
-        radius: 5.5,
-        burnDmgPerTick: Math.round(15 + level * 1.5),
+        damage: scalePower(90 + level * 4.6), // 90 -> 320 at Lv 50
+        cooldown: scaleCd(Math.max(5.0, calculatedCd), 3.8),
+        radius: scaleRadius(5.5),
+        burnDmgPerTick: scalePower(15 + level * 1.5),
         burnTicks: level >= 10 ? 8 : 6,
         dashSpeedMultiplier: 1.75 + Math.min(0.75, level * 0.015),
         hasDecoy: level >= 40,
@@ -489,10 +908,10 @@ export function computeActiveSkillStats(petId: string, level: number) {
 
     case 'pet_turtle':
       return {
-        damage: Math.round(40 + level * 2.5),
-        shield: Math.round(70 + level * 5.4), // 70 -> 340 at Lv 50
-        cooldown: Math.max(8.0, calculatedCd),
-        radius: 4.5 + Math.min(2.5, level * 0.05),
+        damage: scalePower(40 + level * 2.5),
+        shield: scalePower(70 + level * 5.4), // 70 -> 340 at Lv 50
+        cooldown: scaleCd(Math.max(8.0, calculatedCd), 6.0),
+        radius: scaleRadius(4.5 + Math.min(2.5, level * 0.05)),
         knockbackForce: 1.5 + Math.min(1.5, level * 0.03),
         reflectPct: level >= 40 ? 0.35 : 0,
         slowPct: level >= 30 ? 0.5 : 0.25,
@@ -501,9 +920,9 @@ export function computeActiveSkillStats(petId: string, level: number) {
 
     case 'pet_rabbit':
       return {
-        damage: Math.round(80 + level * 3.9), // 80 -> 275 at Lv 50
-        cooldown: Math.max(4.5, calculatedCd),
-        radius: 5.5 + Math.min(2.0, level * 0.04),
+        damage: scalePower(80 + level * 3.9), // 80 -> 275 at Lv 50
+        cooldown: scaleCd(Math.max(4.5, calculatedCd), 3.5),
+        radius: scaleRadius(5.5 + Math.min(2.0, level * 0.04)),
         knockbackAirborne: level >= 20,
         hasAfterimage: level >= 30,
         cooldownRefundOnMultiHit: level >= 40,
@@ -512,11 +931,11 @@ export function computeActiveSkillStats(petId: string, level: number) {
 
     case 'pet_owl':
       return {
-        tickDamage: Math.round(14 + level * 0.48), // 14 -> 38 at Lv 50
+        tickDamage: scalePower(14 + level * 0.48), // 14 -> 38 at Lv 50
         totalTicks: level >= 20 ? 9 : 7,
-        cooldown: Math.max(7.5, calculatedCd),
-        radius: 6.0 + Math.min(6.0, level * 0.12), // 6m -> 12m at Lv 50
-        duration: level >= 20 ? 4.5 : 3.5,
+        cooldown: scaleCd(Math.max(7.5, calculatedCd), 5.5),
+        radius: scaleRadius(6.0 + Math.min(6.0, level * 0.12)), // 6m -> 12m at Lv 50
+        duration: Number(((level >= 20 ? 4.5 : 3.5) * (1 + activeEnhancementLevel * 0.04)).toFixed(1)),
         razorFeathers: level >= 30,
         centerStun: level >= 40,
         isVortexOfDoom: level >= 50,
@@ -524,9 +943,9 @@ export function computeActiveSkillStats(petId: string, level: number) {
 
     case 'pet_bear':
       return {
-        damage: Math.round(120 + level * 5.2), // 120 -> 380 at Lv 50
-        cooldown: Math.max(10.0, calculatedCd),
-        radius: 6.5 + Math.min(4.5, level * 0.09), // 6.5m -> 11m
+        damage: scalePower(120 + level * 5.2), // 120 -> 380 at Lv 50
+        cooldown: scaleCd(Math.max(10.0, calculatedCd), 7.5),
+        radius: scaleRadius(6.5 + Math.min(4.5, level * 0.09)), // 6.5m -> 11m
         stunDuration: level >= 50 ? 2.5 : level >= 10 ? 1.5 : 1.2,
         lingeringSpikes: level >= 20,
         armorRupture: level >= 40,
@@ -535,10 +954,10 @@ export function computeActiveSkillStats(petId: string, level: number) {
 
     case 'pet_slime':
       return {
-        damage: Math.round(70 + level * 4.2), // 70 -> 280 at Lv 50
-        heal: Math.round(45 + level * 1.9), // 45 -> 140 at Lv 50
-        cooldown: Math.max(11.0, calculatedCd),
-        radius: 5.5 + Math.min(3.5, level * 0.07),
+        damage: scalePower(70 + level * 4.2), // 70 -> 280 at Lv 50
+        heal: scalePower(45 + level * 1.9), // 45 -> 140 at Lv 50
+        cooldown: scaleCd(Math.max(11.0, calculatedCd), 8.0),
+        radius: scaleRadius(5.5 + Math.min(3.5, level * 0.07)),
         slowDuration: level >= 20 ? 4.0 : 0,
         lingeringHealOverTime: level >= 30,
         doubleEcho: level >= 40,
@@ -547,56 +966,157 @@ export function computeActiveSkillStats(petId: string, level: number) {
 
     case 'pet_frog':
       return {
-        damage: Math.round(75 + level * 4.7),
-        cooldown: Math.max(5.0, calculatedCd),
-        radius: 5.5 + Math.min(2.5, level * 0.05),
+        damage: scalePower(75 + level * 4.7),
+        cooldown: scaleCd(Math.max(5.0, calculatedCd), 4.0),
+        radius: scaleRadius(5.5 + Math.min(2.5, level * 0.05)),
         slowPct: level >= 10 ? 0.4 : 0.25,
         doubleCast: level >= 30,
       };
 
     case 'pet_wolf':
       return {
-        damage: Math.round(85 + level * 3.5),
-        attackBoostPct: 0.25 + Math.min(0.35, level * 0.007),
-        cooldown: Math.max(8.0, calculatedCd),
-        radius: 6.0,
+        damage: scalePower(85 + level * 3.5),
+        attackBoostPct: Number(((0.25 + Math.min(0.35, level * 0.007)) * enh.powerMultiplier).toFixed(2)),
+        cooldown: scaleCd(Math.max(8.0, calculatedCd), 6.0),
+        radius: scaleRadius(6.0),
         fearDuration: level >= 20 ? 1.2 : 0,
         spawnShadowWolves: level >= 30,
       };
 
     case 'pet_deer':
       return {
-        damage: Math.round(70 + level * 4.2),
-        heal: Math.round(35 + level * 1.7),
+        damage: scalePower(70 + level * 4.2),
+        heal: scalePower(35 + level * 1.7),
         speedBoost: 0.4 + Math.min(0.4, level * 0.008),
-        cooldown: Math.max(6.0, calculatedCd),
-        radius: 5.0,
+        cooldown: scaleCd(Math.max(6.0, calculatedCd), 4.5),
+        radius: scaleRadius(5.0),
       };
 
     case 'pet_dragon':
       return {
-        damage: Math.round(200 + level * 9.0), // 200 -> 650
-        cooldown: Math.max(12.0, calculatedCd),
-        radius: 8.5 + Math.min(3.5, level * 0.07),
+        damage: scalePower(200 + level * 9.0), // 200 -> 650
+        cooldown: scaleCd(Math.max(12.0, calculatedCd), 9.0),
+        radius: scaleRadius(8.5 + Math.min(3.5, level * 0.07)),
         burnTargets: true,
         extraMeteors: level >= 30,
       };
 
     case 'pet_phoenix':
       return {
-        damage: Math.round(180 + level * 8.4), // 180 -> 600
-        heal: level >= 10 ? 9999 : 80 + level * 3.0, // full heal from Lv 10+
-        cooldown: Math.max(14.0, calculatedCd),
-        radius: 8.0,
+        damage: scalePower(180 + level * 8.4), // 180 -> 600
+        heal: level >= 10 ? 9999 : scalePower(80 + level * 3.0), // full heal from Lv 10+
+        cooldown: scaleCd(Math.max(14.0, calculatedCd), 10.0),
+        radius: scaleRadius(8.0),
         blindStun: level >= 20,
         divineShield: level >= 40,
       };
 
+    // 10 New Expansion Pets
+    case 'pet_red_panda':
+      return {
+        damage: scalePower(40 + level * 2.8),
+        healPerTick: scalePower(12 + level * 0.56),
+        burstHeal: level >= 40 ? scalePower(55) : 0,
+        duration: Number(((level >= 40 ? 6.5 : level >= 20 ? 6.0 : 5.0) * (1 + activeEnhancementLevel * 0.04)).toFixed(1)),
+        cooldown: scaleCd(Math.max(8.5, calculatedCd), 6.5),
+        radius: scaleRadius(level >= 50 ? 8.0 : level >= 10 ? 6.5 : 5.5),
+      };
+
+    case 'pet_timber_wolf':
+      return {
+        damage: scalePower(105 + level * 4.7),
+        cooldown: scaleCd(Math.max(6.0, calculatedCd), 4.5),
+        radius: scaleRadius(5.5),
+        knockbackForce: level >= 10 ? 1.8 : 1.0,
+        stunDuration: level >= 40 ? 1.0 : 0,
+      };
+
+    case 'pet_sylvan_deer':
+      return {
+        damage: scalePower(level >= 40 ? Math.round(60 + level * 1.6) : Math.round(45 + level * 1.2)),
+        shield: scalePower(60 + level * 3.2),
+        heal: level >= 30 ? scalePower(35) : 0,
+        defensePct: Math.min(50, Math.round((25 + Math.floor(level / 3)) * enh.powerMultiplier)),
+        duration: Number(((level >= 50 ? 7.0 : level >= 20 ? 6.0 : 5.0) * (1 + activeEnhancementLevel * 0.04)).toFixed(1)),
+        cooldown: scaleCd(Math.max(9.0, calculatedCd), 6.8),
+        radius: scaleRadius(6.0),
+      };
+
+    case 'pet_penguin':
+      return {
+        damage: scalePower(85 + level * 4.2),
+        cooldown: scaleCd(Math.max(6.5, calculatedCd), 4.8),
+        radius: scaleRadius(5.2),
+        slowPct: level >= 50 ? 0.65 : level >= 10 ? 0.5 : 0.4,
+        slowDuration: level >= 50 ? 4.5 : 3.5,
+        stunDuration: level >= 50 ? 1.2 : level >= 40 ? 0.8 : 0,
+      };
+
+    case 'pet_bat':
+      return {
+        damage: scalePower(90 + level * 4.2),
+        baseHeal: scalePower(28 + level * 1.2),
+        healPerTarget: scalePower(8 + Math.floor(level / 8)),
+        cooldown: scaleCd(Math.max(7.5, calculatedCd), 5.6),
+        radius: scaleRadius(level >= 50 ? 9.0 : level >= 20 ? 7.5 : 6.2),
+      };
+
+    case 'pet_poison_frog':
+      return {
+        damage: scalePower(80 + level * 4.0),
+        tickDamage: scalePower(22 + level * 0.66),
+        duration: Number(((level >= 40 ? 6.0 : 4.5) * (1 + activeEnhancementLevel * 0.04)).toFixed(1)),
+        cooldown: scaleCd(Math.max(7.0, calculatedCd), 5.2),
+        radius: scaleRadius(level >= 20 ? 5.5 : 4.5),
+        slowPct: level >= 20 ? 0.4 : 0.25,
+      };
+
+    case 'pet_hedgehog':
+      return {
+        damage: scalePower(95 + level * 4.3),
+        shield: level >= 50 ? scalePower(100) : level >= 10 ? scalePower(40) : 0,
+        cooldown: scaleCd(Math.max(5.0, calculatedCd), 3.8),
+        radius: scaleRadius(level >= 20 ? 5.5 : 4.5),
+        stunDuration: level >= 40 ? 1.0 : 0,
+      };
+
+    case 'pet_bee': {
+      const boltCount = level >= 50 ? 9 : level >= 40 ? 8 : level >= 30 ? 7 : level >= 10 ? 6 : 5;
+      const dmgPerBolt = scalePower(30 + level * 0.7);
+      return {
+        damage: dmgPerBolt * boltCount,
+        dmgPerBolt,
+        boltCount,
+        cooldown: scaleCd(Math.max(5.5, calculatedCd), 4.2),
+        radius: scaleRadius(9.0),
+        slowPct: level >= 20 ? 0.4 : 0.25,
+      };
+    }
+
+    case 'pet_dragon_whelp':
+      return {
+        damage: scalePower(125 + level * 6.5),
+        cooldown: scaleCd(Math.max(6.5, calculatedCd), 4.8),
+        radius: scaleRadius(level >= 40 ? 9.0 : level >= 10 ? 8.0 : 7.0),
+        burnDmgPerTick: scalePower(16 + level * 1.2),
+        isFireSkill: true,
+      };
+
+    case 'pet_capybara':
+      return {
+        damage: 0,
+        heal: scalePower(20 + level * 2.0),
+        defensePct: Math.min(62, Math.round((30 + Math.floor(level * 0.5)) * enh.powerMultiplier)),
+        duration: Number(((level >= 50 ? 7.0 : level >= 20 ? 6.0 : 5.0) * (1 + activeEnhancementLevel * 0.04)).toFixed(1)),
+        cooldown: scaleCd(Math.max(10.0, calculatedCd), 7.5),
+        radius: scaleRadius(level >= 20 ? 6.5 : 5.5),
+      };
+
     default:
       return {
-        damage: 80 + level * 10,
-        cooldown: calculatedCd,
-        radius: 6.0,
+        damage: scalePower(80 + level * 10),
+        cooldown: scaleCd(calculatedCd, 4.0),
+        radius: scaleRadius(6.0),
         heal: 0,
         shield: 0,
         stunDuration: 0,

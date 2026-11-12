@@ -12,10 +12,20 @@ import {
   AlertCircle,
   CheckCircle2,
   TrendingUp,
+  Flame,
 } from 'lucide-react';
-import { PlayerStats, NourishmentBonuses } from '../types/game';
+import { PlayerStats, NourishmentBonuses, PetRarity } from '../types/game';
 import { NOURISHMENT_CONFIGS, CropNourishmentConfig, CROPS } from '../game/constants';
 import { soundEngine } from '../audio/soundEngine';
+
+const RARITY_BADGE_STYLE: Record<PetRarity, string> = {
+  Common: 'bg-stone-800 text-stone-300 border-stone-600/60',
+  Uncommon: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50',
+  Rare: 'bg-sky-950/80 text-sky-300 border-sky-500/50',
+  Epic: 'bg-purple-950/80 text-purple-300 border-purple-500/50',
+  Legendary: 'bg-amber-950/80 text-amber-300 border-amber-500/60',
+  Mythical: 'bg-rose-950/80 text-rose-300 border-rose-500/60',
+};
 
 interface NourishmentModalProps {
   player: PlayerStats;
@@ -39,18 +49,21 @@ export const NourishmentModal: React.FC<NourishmentModalProps> = ({
     strawberriesConsumed: 0,
     cornConsumed: 0,
     pumpkinsConsumed: 0,
+    consumedCounts: {},
     maxHpBonus: 0,
     attackDamagePct: 0,
     critChancePct: 0,
     moveSpeedPct: 0,
     defensePct: 0,
+    critDamagePct: 0,
+    skillDamagePct: 0,
   };
 
   const handleStartConsume = (config: CropNourishmentConfig, amount: number = 1) => {
     const available = inventory[config.cropId] || 0;
     if (available <= 0) return;
 
-    const currentBonus = nourishment[config.statKey] || 0;
+    const currentBonus = nourishment[config.statKey] ?? 0;
     const remainingCap = Math.max(0, config.maxBonus - currentBonus);
     if (remainingCap <= 0.001) return;
 
@@ -77,6 +90,8 @@ export const NourishmentModal: React.FC<NourishmentModalProps> = ({
   const totalCritChancePct = Number((nourishment.critChancePct || 0).toFixed(1));
   const totalMoveSpeedPct = Number((nourishment.moveSpeedPct || 0).toFixed(1));
   const totalDefensePct = Number((nourishment.defensePct || 0).toFixed(1));
+  const totalCritDamagePct = Number((nourishment.critDamagePct || 0).toFixed(1));
+  const totalSkillDamagePct = Number((nourishment.skillDamagePct || 0).toFixed(1));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-md select-none">
@@ -111,15 +126,15 @@ export const NourishmentModal: React.FC<NourishmentModalProps> = ({
         </div>
 
         {/* Current Attributes Overview Banner */}
-        <div className="px-5 sm:px-6 py-3.5 bg-stone-950/70 border-b border-stone-800/80 grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <div className="px-5 sm:px-6 py-3.5 bg-stone-950/70 border-b border-stone-800/80 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           {/* Max HP */}
-          <div className="bg-stone-900/90 border border-rose-500/30 rounded-xl p-2.5 flex items-center gap-2.5">
+          <div className="bg-stone-900/90 border border-rose-500/30 rounded-xl p-2 flex items-center gap-2">
             <Heart className="w-4 h-4 text-rose-400 shrink-0" />
             <div className="min-w-0">
-              <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Max HP</div>
-              <div className="text-xs sm:text-sm font-black text-rose-200">
+              <div className="text-[9.5px] text-stone-400 font-bold uppercase tracking-wider">Max HP</div>
+              <div className="text-xs font-black text-rose-200 truncate">
                 {totalMaxHp}
-                <span className="text-[10px] text-rose-400/90 ml-1">
+                <span className="text-[9.5px] text-rose-400/90 ml-1">
                   (+{(nourishment.maxHpBonus || 0).toFixed(1)})
                 </span>
               </div>
@@ -127,44 +142,66 @@ export const NourishmentModal: React.FC<NourishmentModalProps> = ({
           </div>
 
           {/* Attack Damage */}
-          <div className="bg-stone-900/90 border border-amber-500/30 rounded-xl p-2.5 flex items-center gap-2.5">
+          <div className="bg-stone-900/90 border border-amber-500/30 rounded-xl p-2 flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-400 shrink-0" />
             <div className="min-w-0">
-              <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Attack</div>
-              <div className="text-xs sm:text-sm font-black text-amber-200">
+              <div className="text-[9.5px] text-stone-400 font-bold uppercase tracking-wider">Attack</div>
+              <div className="text-xs font-black text-amber-200">
                 +{totalAttackDamagePct}%
               </div>
             </div>
           </div>
 
           {/* Critical Chance */}
-          <div className="bg-stone-900/90 border border-purple-500/30 rounded-xl p-2.5 flex items-center gap-2.5">
+          <div className="bg-stone-900/90 border border-purple-500/30 rounded-xl p-2 flex items-center gap-2">
             <Target className="w-4 h-4 text-purple-400 shrink-0" />
             <div className="min-w-0">
-              <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Crit Rate</div>
-              <div className="text-xs sm:text-sm font-black text-purple-200">
+              <div className="text-[9.5px] text-stone-400 font-bold uppercase tracking-wider">Crit Rate</div>
+              <div className="text-xs font-black text-purple-200">
                 +{totalCritChancePct}%
               </div>
             </div>
           </div>
 
+          {/* Critical Damage */}
+          <div className="bg-stone-900/90 border border-orange-500/30 rounded-xl p-2 flex items-center gap-2">
+            <Flame className="w-4 h-4 text-orange-400 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[9.5px] text-stone-400 font-bold uppercase tracking-wider">Crit Dmg</div>
+              <div className="text-xs font-black text-orange-200">
+                +{totalCritDamagePct}%
+              </div>
+            </div>
+          </div>
+
+          {/* Skill Damage */}
+          <div className="bg-stone-900/90 border border-cyan-500/30 rounded-xl p-2 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[9.5px] text-stone-400 font-bold uppercase tracking-wider">Skill Dmg</div>
+              <div className="text-xs font-black text-cyan-200">
+                +{totalSkillDamagePct}%
+              </div>
+            </div>
+          </div>
+
           {/* Move Speed */}
-          <div className="bg-stone-900/90 border border-sky-500/30 rounded-xl p-2.5 flex items-center gap-2.5">
+          <div className="bg-stone-900/90 border border-sky-500/30 rounded-xl p-2 flex items-center gap-2">
             <Wind className="w-4 h-4 text-sky-400 shrink-0" />
             <div className="min-w-0">
-              <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Speed</div>
-              <div className="text-xs sm:text-sm font-black text-sky-200">
+              <div className="text-[9.5px] text-stone-400 font-bold uppercase tracking-wider">Speed</div>
+              <div className="text-xs font-black text-sky-200">
                 +{totalMoveSpeedPct}%
               </div>
             </div>
           </div>
 
           {/* Defense */}
-          <div className="bg-stone-900/90 border border-emerald-500/30 rounded-xl p-2.5 flex items-center gap-2.5 col-span-2 sm:col-span-1">
+          <div className="bg-stone-900/90 border border-emerald-500/30 rounded-xl p-2 flex items-center gap-2 col-span-2 sm:col-span-1">
             <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
             <div className="min-w-0">
-              <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Defense</div>
-              <div className="text-xs sm:text-sm font-black text-emerald-200">
+              <div className="text-[9.5px] text-stone-400 font-bold uppercase tracking-wider">Defense</div>
+              <div className="text-xs font-black text-emerald-200">
                 +{totalDefensePct}%
               </div>
             </div>
@@ -176,11 +213,14 @@ export const NourishmentModal: React.FC<NourishmentModalProps> = ({
           {configs.map((cfg) => {
             const cropDef = CROPS[cfg.cropId];
             const ownedCount = inventory[cfg.cropId] || 0;
-            const accumulatedBonus = Number((nourishment[cfg.statKey] || 0).toFixed(1));
+            const accumulatedBonus = Number((nourishment[cfg.statKey] ?? 0).toFixed(1));
             const remainingCapacity = Number(Math.max(0, cfg.maxBonus - accumulatedBonus).toFixed(1));
             const progressPct = Math.min(100, Math.max(0, (accumulatedBonus / cfg.maxBonus) * 100));
             const isMaxed = accumulatedBonus >= cfg.maxBonus;
-            const consumedCount = nourishment[cfg.consumedKey] || 0;
+            const consumedCount =
+              nourishment.consumedCounts?.[cfg.cropId] ??
+              (cfg.consumedKey ? nourishment[cfg.consumedKey] : 0) ??
+              0;
 
             return (
               <div
@@ -204,8 +244,15 @@ export const NourishmentModal: React.FC<NourishmentModalProps> = ({
                       {cfg.icon}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <h4 className="text-sm font-bold text-white tracking-wide">{cfg.name}</h4>
+                        <span
+                          className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-md border ${
+                            RARITY_BADGE_STYLE[cfg.rarity]
+                          }`}
+                        >
+                          {cfg.rarity}
+                        </span>
                         <span className="bg-stone-800 text-stone-300 text-[10px] px-2 py-0.5 rounded-full font-semibold">
                           Bag: <strong className="text-amber-300">{ownedCount}</strong>
                         </span>

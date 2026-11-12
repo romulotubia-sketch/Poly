@@ -1,70 +1,77 @@
-import React, { useRef, useState } from 'react';
-import { ArrowUp, Sparkles, RotateCcw, RotateCw } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowUp, Sparkles } from 'lucide-react';
 
 interface MobileControlsProps {
   onJoystickMove: (vec: { x: number; y: number }) => void;
   onJump: () => void;
   onInteract: () => void;
-  onCamTurn: (direction: number) => void;
   hasInteractable: boolean;
   isZenMode: boolean;
+  isModalOpen?: boolean;
 }
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
   onJoystickMove,
   onJump,
   onInteract,
-  onCamTurn,
   hasInteractable,
   isZenMode,
+  isModalOpen = false,
 }) => {
-  const stickRef = useRef<HTMLDivElement>(null);
-  const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const touchIdRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const pointerIdRef = useRef<number | null>(null);
+  const originRef = useRef<{ x: number; y: number } | null>(null);
+
+  const [joystickOrigin, setJoystickOrigin] = useState<{ x: number; y: number } | null>(null);
+  const [knobPos, setKnobPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const radius = 46;
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (touchIdRef.current !== null) return;
-    const touch = e.changedTouches[0];
-    touchIdRef.current = touch.identifier;
-    setIsDragging(true);
-    updateKnob(touch.clientX, touch.clientY);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchIdRef.current === null || !stickRef.current) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i];
-      if (touch.identifier === touchIdRef.current) {
-        updateKnob(touch.clientX, touch.clientY);
-        break;
-      }
+  // Reset floating joystick whenever a modal opens
+  useEffect(() => {
+    if (isModalOpen) {
+      pointerIdRef.current = null;
+      originRef.current = null;
+      setJoystickOrigin(null);
+      setKnobPos({ x: 0, y: 0 });
+      onJoystickMove({ x: 0, y: 0 });
     }
+  }, [isModalOpen, onJoystickMove]);
+
+  const clearJoystick = () => {
+    pointerIdRef.current = null;
+    originRef.current = null;
+    setJoystickOrigin(null);
+    setKnobPos({ x: 0, y: 0 });
+    onJoystickMove({ x: 0, y: 0 });
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchIdRef.current === null) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      if (e.changedTouches[i].identifier === touchIdRef.current) {
-        touchIdRef.current = null;
-        setIsDragging(false);
-        setKnobPos({ x: 0, y: 0 });
-        onJoystickMove({ x: 0, y: 0 });
-        break;
-      }
-    }
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isModalOpen) return;
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (pointerIdRef.current !== null) return;
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const pad = radius + 16;
+    const localX = Math.max(pad, Math.min(rect.width - pad, e.clientX - rect.left));
+    const localY = Math.max(pad, Math.min(rect.height - pad, e.clientY - rect.top));
+
+    pointerIdRef.current = e.pointerId;
+    originRef.current = { x: localX, y: localY };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+
+    setJoystickOrigin({ x: localX, y: localY });
+    setKnobPos({ x: 0, y: 0 });
+    onJoystickMove({ x: 0, y: 0 });
   };
 
-  const updateKnob = (clientX: number, clientY: number) => {
-    if (!stickRef.current) return;
-    const rect = stickRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId || !originRef.current || !containerRef.current) return;
 
-    let dx = clientX - centerX;
-    let dy = clientY - centerY;
+    const rect = containerRef.current.getBoundingClientRect();
+    let dx = e.clientX - rect.left - originRef.current.x;
+    let dy = e.clientY - rect.top - originRef.current.y;
     const dist = Math.hypot(dx, dy);
 
     if (dist > radius) {
@@ -76,92 +83,100 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     onJoystickMove({ x: dx / radius, y: dy / radius });
   };
 
-  if (isZenMode) return null;
+  const handlePointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return;
+    clearJoystick();
+  };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 select-none overflow-hidden">
-      {/* Left Thumb Virtual Joystick */}
-      <div
-        ref={stickRef}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
-        className="pointer-events-auto absolute bottom-4 left-4 sm:bottom-6 sm:left-6 w-32 h-32 rounded-full bg-stone-900/60 border-2 border-stone-600/50 backdrop-blur-sm flex items-center justify-center active:border-amber-400 touch-none shadow-2xl"
-      >
-        {/* Directional compass ticks */}
-        <div className="absolute top-1 text-[9px] text-stone-500 font-bold">▲</div>
-        <div className="absolute bottom-1 text-[9px] text-stone-500 font-bold">▼</div>
-        <div className="absolute left-1 text-[9px] text-stone-500 font-bold">◀</div>
-        <div className="absolute right-1 text-[9px] text-stone-500 font-bold">▶</div>
-
-        {/* Joystick Thumb Knob */}
+    <div ref={containerRef} className="pointer-events-none fixed inset-0 z-20 select-none overflow-hidden">
+      {/* Empty-space touch/pointer capture zone to spawn floating joystick (sits behind HUD z-30 and modals z-50) */}
+      {!isModalOpen && (
         <div
-          className={`w-14 h-14 rounded-full border-2 shadow-lg pointer-events-none flex items-center justify-center ${
-            isDragging
-              ? 'bg-amber-500 border-amber-200 scale-105'
-              : 'bg-amber-600/80 border-amber-400/80'
-          }`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          onLostPointerCapture={clearJoystick}
+          className="pointer-events-auto absolute inset-0 touch-none"
+          aria-label="Movement Touch Area"
+        />
+      )}
+
+      {/* Floating Virtual Joystick (appears wherever user taps on empty space) */}
+      {joystickOrigin && (
+        <div
+          className="pointer-events-none absolute w-28 h-28 rounded-full bg-stone-900/55 border-2 border-amber-400/70 backdrop-blur-sm flex items-center justify-center shadow-2xl"
           style={{
-            transform: `translate(${knobPos.x}px, ${knobPos.y}px)`,
-            transition: isDragging ? 'none' : 'transform 0.15s ease-out',
+            left: joystickOrigin.x - 56,
+            top: joystickOrigin.y - 56,
           }}
         >
-          <div className="w-4 h-4 rounded-full bg-amber-200/60" />
-        </div>
-      </div>
+          <div className="absolute top-1 text-[9px] text-amber-300/70 font-bold">▲</div>
+          <div className="absolute bottom-1 text-[9px] text-amber-300/70 font-bold">▼</div>
+          <div className="absolute left-1 text-[9px] text-amber-300/70 font-bold">◀</div>
+          <div className="absolute right-1 text-[9px] text-amber-300/70 font-bold">▶</div>
 
-      {/* Right Thumb Action Zone */}
-      <div className="pointer-events-auto absolute bottom-4 right-4 sm:bottom-6 sm:right-6 flex items-end gap-3 touch-none">
-        {/* Camera Quick Turn Buttons */}
-        <div className="flex flex-col gap-2">
-          <button
-            onTouchStart={() => onCamTurn(1)}
-            onTouchEnd={() => onCamTurn(0)}
-            onMouseDown={() => onCamTurn(1)}
-            onMouseUp={() => onCamTurn(0)}
-            className="w-11 h-11 rounded-2xl bg-stone-900/70 active:bg-stone-800 border border-stone-600/60 text-stone-300 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-            title="Rotate Camera Left"
+          <div
+            className="w-12 h-12 rounded-full bg-amber-500 border-2 border-amber-200 shadow-lg flex items-center justify-center"
+            style={{
+              transform: `translate(${knobPos.x}px, ${knobPos.y}px)`,
+            }}
           >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <button
-            onTouchStart={() => onCamTurn(-1)}
-            onTouchEnd={() => onCamTurn(0)}
-            onMouseDown={() => onCamTurn(-1)}
-            onMouseUp={() => onCamTurn(0)}
-            className="w-11 h-11 rounded-2xl bg-stone-900/70 active:bg-stone-800 border border-stone-600/60 text-stone-300 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-            title="Rotate Camera Right"
-          >
-            <RotateCw className="w-4 h-4" />
-          </button>
+            <div className="w-3.5 h-3.5 rounded-full bg-amber-100/70" />
+          </div>
         </div>
+      )}
 
-        {/* Main Action Buttons */}
-        <div className="flex flex-col gap-3 items-center">
-          {/* Action / Interact Button (Till, Plant, Water, Harvest) */}
+      {/* Right Thumb Action & Jump Buttons (Portrait-safe above bottom skill dock) */}
+      {!isZenMode && (
+        <div className="pointer-events-auto fixed bottom-24 right-3 sm:bottom-24 sm:right-5 z-30 flex flex-col gap-2.5 items-center touch-none">
+          {/* Action / Interact Button */}
           <button
-            onClick={onInteract}
-            className={`w-16 h-16 rounded-full border-2 font-black text-xs flex flex-col items-center justify-center shadow-2xl active:scale-90 transition-all ${
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onInteract();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onInteract();
+              }
+            }}
+            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 font-black text-xs flex flex-col items-center justify-center shadow-2xl active:scale-90 transition-all touch-none cursor-pointer ${
               hasInteractable
                 ? 'bg-gradient-to-tr from-amber-600 to-yellow-500 border-yellow-200 text-white animate-pulse'
                 : 'bg-stone-800/80 border-stone-600/70 text-stone-300'
             }`}
           >
-            <Sparkles className={`w-5 h-5 ${hasInteractable ? 'text-yellow-100' : 'text-stone-400'}`} />
-            <span className="text-[10px] tracking-tight mt-0.5 font-bold">ACTION</span>
+            <Sparkles className={`w-4 h-4 sm:w-5 sm:h-5 ${hasInteractable ? 'text-yellow-100' : 'text-stone-400'}`} />
+            <span className="text-[9px] sm:text-[10px] tracking-tight mt-0.5 font-bold">ACTION</span>
           </button>
 
           {/* Jump Button */}
           <button
-            onClick={onJump}
-            className="w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 border-2 border-emerald-300 text-white font-black text-xs flex flex-col items-center justify-center shadow-2xl active:scale-90 transition-all"
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onJump();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onJump();
+              }
+            }}
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-green-500 border-2 border-emerald-300 text-white font-black text-xs flex flex-col items-center justify-center shadow-2xl active:scale-90 transition-all touch-none cursor-pointer"
           >
-            <ArrowUp className="w-6 h-6 text-emerald-100" />
-            <span className="text-[10px] tracking-tight font-bold">JUMP</span>
+            <ArrowUp className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-100" />
+            <span className="text-[9px] sm:text-[10px] tracking-tight font-bold">JUMP</span>
           </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };
+

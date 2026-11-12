@@ -5,7 +5,6 @@ import { PetModal } from './components/PetModal';
 import { InventoryModal } from './components/InventoryModal';
 import { SettingsModal } from './components/SettingsModal';
 import { MobileControls } from './components/MobileControls';
-import { LandscapeNotice } from './components/LandscapeNotice';
 import { SeedShopModal } from './components/SeedShopModal';
 import { SeedPickerModal } from './components/SeedPickerModal';
 import { PetEssenceShopModal } from './components/PetEssenceShopModal';
@@ -14,12 +13,31 @@ import { InstanceResultModal } from './components/InstanceResultModal';
 import { DuplicateNotificationModal } from './components/DuplicateNotificationModal';
 import { NourishmentModal } from './components/NourishmentModal';
 import { PetInteractionModal } from './components/PetInteractionModal';
-import { PetData, FarmPlotState, PlayerStats, EssenceShopItem, GraphicsQuality, PerformanceStatsData } from './types/game';
+import { MissionBoardModal } from './components/MissionBoardModal';
+import {
+  PetData,
+  FarmPlotState,
+  PlayerStats,
+  EssenceShopItem,
+  GraphicsQuality,
+  PerformanceStatsData,
+  MissionBoardState,
+  MissionEventType,
+  MissionPeriod,
+  MissionReward,
+} from './types/game';
 import { INITIAL_PETS, INITIAL_FARM_PLOTS, INITIAL_INVENTORY, DUPLICATE_ESSENCE_VALUES, CROPS, INITIAL_NOURISHMENT, NOURISHMENT_CONFIGS } from './game/constants';
 import { soundEngine } from './audio/soundEngine';
 import { computeActiveSkillStats } from './game/combatSkills';
 import { PortalTheme } from './game/portalSystem';
 import { TimePhase } from './game/environmentSystem';
+import {
+  loadAndSyncMissions,
+  syncMissionsWithClock,
+  applyMissionEvent,
+  saveMissionState,
+  getUnclaimedMissionRewardsCount,
+} from './game/missions';
 
 const SAVE_KEY = 'pet_haven_saved_game_v2';
 
@@ -86,10 +104,12 @@ export default function App() {
           return INITIAL_PETS.map((init) => {
             const savedPet = parsed.pets.find((p: PetData) => p.id === init.id);
             if (savedPet) {
-              const shouldFollow = equippedSlots.includes(init.id) || (savedPet.isFollowing ?? init.isFollowing);
+              const isUnlocked = savedPet.unlocked ?? init.unlocked;
+              const shouldFollow = isUnlocked && equippedSlots.includes(init.id);
               return {
                 ...init,
                 ...savedPet,
+                unlocked: isUnlocked,
                 isFollowing: shouldFollow,
                 species: init.species,
                 color: init.color,
@@ -170,12 +190,39 @@ export default function App() {
   const [showPortalModal, setShowPortalModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [instanceResultData, setInstanceResultData] = useState<InstanceResultData | null>(null);
+  const [showMissionModal, setShowMissionModal] = useState(false);
+
+  // Daily & Weekly Mission System State
+  const initialMissionSyncRef = useRef<{ dailyRefreshed: boolean; weeklyRefreshed: boolean }>({
+    dailyRefreshed: false,
+    weeklyRefreshed: false,
+  });
+  const [missionState, setMissionState] = useState<MissionBoardState>(() => {
+    const loaded = loadAndSyncMissions(Date.now());
+    initialMissionSyncRef.current = {
+      dailyRefreshed: loaded.dailyRefreshed,
+      weeklyRefreshed: loaded.weeklyRefreshed,
+    };
+    return loaded.state;
+  });
+  const missionStateRef = useRef<MissionBoardState>(missionState);
+  missionStateRef.current = missionState;
+
+  const [missionToast, setMissionToast] = useState<string | null>(null);
+  const missionToastTimeoutRef = useRef<number | null>(null);
+  const showMissionToast = useCallback((text: string) => {
+    setMissionToast(text);
+    if (missionToastTimeoutRef.current) clearTimeout(missionToastTimeoutRef.current);
+    missionToastTimeoutRef.current = window.setTimeout(() => {
+      setMissionToast(null);
+    }, 3600);
+  }, []);
 
   // Duplicate pet conversion modal event
   const [duplicateEvent, setDuplicateEvent] = useState<{ pet: PetData; essenceEarned: number } | null>(null);
 
   const [isZenMode, setIsZenMode] = useState(false);
-  const [messageToast, setMessageToast] = useState<string | null>('Welcome to Pet Haven! Use the left joystick to move.');
+  const [messageToast, setMessageToast] = useState<string | null>('Welcome to Pet Haven! Tap empty space to spawn the movement joystick.');
 
   // Graphics Quality & Performance Monitoring
   const [graphicsQuality, setGraphicsQuality] = useState<GraphicsQuality>(() => {
@@ -220,7 +267,32 @@ export default function App() {
     });
   }, []);
 
-  // Fullscreen support
+  const [cameraAngleDeg, setCameraAngleDeg] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('pet_haven_camera_angle_v2_deg');
+      if (saved) {
+        const parsed = Number(saved);
+        if (!Number.isNaN(parsed)) {
+          return Math.max(35, Math.min(82, Math.round(parsed)));
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 62;
+  });
+
+  const handleChangeCameraAngleDeg = useCallback((deg: number) => {
+    const clamped = Math.max(35, Math.min(82, Math.round(deg)));
+    setCameraAngleDeg(clamped);
+    try {
+      localStorage.setItem('pet_haven_camera_angle_v2_deg', String(clamped));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Fullscreen support (defaults to portrait orientation)
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const toggleFullscreen = useCallback(() => {
@@ -228,7 +300,7 @@ export default function App() {
       document.documentElement.requestFullscreen?.().catch(() => {});
       setIsFullscreen(true);
       if ('orientation' in screen && 'lock' in screen.orientation) {
-        (screen.orientation.lock as (o: string) => Promise<void>)('landscape').catch(() => {});
+        (screen.orientation.lock as (o: string) => Promise<void>)('portrait').catch(() => {});
       }
     } else {
       document.exitFullscreen?.().catch(() => {});
@@ -248,9 +320,8 @@ export default function App() {
   // Mobile virtual joystick input vector
   const [joystickVector, setJoystickVector] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Mobile Jump trigger and camera turning
+  // Mobile Jump trigger
   const [jumpCount, setJumpCount] = useState(0);
-  const [camTurnDelta, setCamTurnDelta] = useState(0);
 
   // Skill Cooldowns (petId -> remaining seconds)
   const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({});
@@ -310,6 +381,152 @@ export default function App() {
       return copy;
     });
   }, []);
+
+  // Mission System: Event Tracking, UTC+8 Resets, Playtime, & Manual Reward Claiming
+  const syncMissionClock = useCallback(() => {
+    const res = syncMissionsWithClock(missionStateRef.current, Date.now());
+    if (res.dailyRefreshed || res.weeklyRefreshed) {
+      missionStateRef.current = res.state;
+      setMissionState(res.state);
+      if (res.weeklyRefreshed && res.dailyRefreshed) {
+        showMissionToast('Daily & Weekly Missions Reset! New objectives ready.');
+      } else if (res.weeklyRefreshed) {
+        showMissionToast('Weekly Missions Reset! New weekly objectives ready.');
+      } else {
+        showMissionToast('Daily Missions Reset! New daily objectives ready.');
+      }
+    }
+    return res.state;
+  }, [showMissionToast]);
+
+  const recordMissionEvent = useCallback(
+    (eventType: MissionEventType, amount: number = 1, trackKey?: string) => {
+      const currentSynced = syncMissionClock();
+      const { nextState, newlyCompleted, newlyUnlockedMilestones } = applyMissionEvent(
+        currentSynced,
+        eventType,
+        amount,
+        trackKey ? { trackKey } : undefined
+      );
+
+      if (nextState !== currentSynced) {
+        missionStateRef.current = nextState;
+        setMissionState(nextState);
+        saveMissionState(nextState);
+      }
+
+      if (newlyUnlockedMilestones.length > 0) {
+        const ms = newlyUnlockedMilestones[0];
+        showMissionToast(`Milestone Unlocked: ${ms.title}! Open Missions to claim.`);
+      } else if (newlyCompleted.length > 0) {
+        const first = newlyCompleted[0];
+        showMissionToast(`Mission Complete: ${first.title}! Open Missions to claim.`);
+      }
+    },
+    [syncMissionClock, showMissionToast]
+  );
+
+  const grantMissionReward = useCallback(
+    (reward: MissionReward) => {
+      // Grant Gold and Pet Essence directly (do NOT emit earn_coins for mission rewards)
+      if ((reward.gold && reward.gold > 0) || (reward.petEssence && reward.petEssence > 0)) {
+        setPlayer((prev) => ({
+          ...prev,
+          gold: prev.gold + (reward.gold || 0),
+          petEssence: (prev.petEssence || 0) + (reward.petEssence || 0),
+        }));
+      }
+      if (reward.seeds && reward.seeds.length > 0) {
+        for (const seed of reward.seeds) {
+          if (seed.count > 0) {
+            handleAddInventory(seed.seedKey, seed.count);
+          }
+        }
+      }
+    },
+    [handleAddInventory]
+  );
+
+  const handleClaimMission = useCallback(
+    (missionId: string, period: MissionPeriod) => {
+      const current = syncMissionClock();
+      const list = period === 'daily' ? current.dailyMissions : current.weeklyMissions;
+      const target = list.find((m) => m.id === missionId);
+      if (!target || !target.completed || target.claimed) return;
+
+      const updatedList = list.map((m) => (m.id === missionId ? { ...m, claimed: true } : m));
+      const nextState: MissionBoardState =
+        period === 'daily'
+          ? { ...current, dailyMissions: updatedList }
+          : { ...current, weeklyMissions: updatedList };
+
+      missionStateRef.current = nextState;
+      setMissionState(nextState);
+      saveMissionState(nextState);
+      grantMissionReward(target.reward);
+      soundEngine.playBuySuccess();
+      showMissionToast(`Claimed reward for "${target.title}"!`);
+    },
+    [syncMissionClock, grantMissionReward, showMissionToast]
+  );
+
+  const handleClaimMilestone = useCallback(
+    (milestoneId: string, period: MissionPeriod) => {
+      const current = syncMissionClock();
+      const completedCount =
+        period === 'daily'
+          ? current.dailyMissions.filter((m) => m.completed).length
+          : current.weeklyMissions.filter((m) => m.completed).length;
+
+      const list = period === 'daily' ? current.dailyMilestones : current.weeklyMilestones;
+      const target = list.find((ms) => ms.id === milestoneId);
+      if (!target || target.claimed || completedCount < target.requiredCount) return;
+
+      const updatedList = list.map((ms) => (ms.id === milestoneId ? { ...ms, claimed: true } : ms));
+      const nextState: MissionBoardState =
+        period === 'daily'
+          ? { ...current, dailyMilestones: updatedList }
+          : { ...current, weeklyMilestones: updatedList };
+
+      missionStateRef.current = nextState;
+      setMissionState(nextState);
+      saveMissionState(nextState);
+      grantMissionReward(target.reward);
+      soundEngine.playLevelUp();
+      showMissionToast(`Claimed Milestone: ${target.title}!`);
+    },
+    [syncMissionClock, grantMissionReward, showMissionToast]
+  );
+
+  // Show startup refresh notice if UTC+8 reset happened while offline
+  useEffect(() => {
+    const { dailyRefreshed, weeklyRefreshed } = initialMissionSyncRef.current;
+    if (dailyRefreshed && weeklyRefreshed) {
+      showMissionToast('Daily & Weekly Missions Refreshed!');
+    } else if (weeklyRefreshed) {
+      showMissionToast('Weekly Missions Refreshed!');
+    } else if (dailyRefreshed) {
+      showMissionToast('Daily Missions Refreshed!');
+    }
+  }, [showMissionToast]);
+
+  // Periodically check UTC+8 Daily/Weekly reset boundaries every 10s
+  useEffect(() => {
+    const resetCheckTimer = window.setInterval(() => {
+      syncMissionClock();
+    }, 10000);
+    return () => window.clearInterval(resetCheckTimer);
+  }, [syncMissionClock]);
+
+  // Active Playtime Tracker (1 minute intervals while tab is visible)
+  useEffect(() => {
+    const playtimeTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        recordMissionEvent('play_time_minute', 1);
+      }
+    }, 60000);
+    return () => window.clearInterval(playtimeTimer);
+  }, [recordMissionEvent]);
 
   // Save game to LocalStorage periodically
   useEffect(() => {
@@ -440,6 +657,7 @@ export default function App() {
     soundEngine.playPlantSeed();
     const crop = CROPS[cropId];
     showMessage(`Planted ${crop?.name || cropId}! Watered soil.`);
+    recordMissionEvent('plant_seed', 1, cropId);
   };
 
   // Purchasing items from Pet Essence Shop
@@ -470,6 +688,7 @@ export default function App() {
         })
       );
       showMessage(`Fed ${item.name} to ${activePet.name}! (+${expAdd} EXP)`);
+      recordMissionEvent('gain_pet_exp', expAdd);
     } else if (item.category === 'enhancement') {
       showMessage(`Empowered pets with ${item.name}! Abilities boosted.`);
     } else if (item.category === 'egg') {
@@ -492,9 +711,11 @@ export default function App() {
       localStorage.setItem(
         SAVE_KEY,
         JSON.stringify({
+          version: 2,
           player,
           pets,
           farmPlots,
+          inventory,
           savedAt: Date.now(),
         })
       );
@@ -525,9 +746,11 @@ export default function App() {
       localStorage.setItem(
         SAVE_KEY,
         JSON.stringify({
+          version: 2,
           player,
           pets,
           farmPlots,
+          inventory,
           savedAt: Date.now(),
         })
       );
@@ -562,7 +785,7 @@ export default function App() {
       if (!cfg) return;
 
       const currentBonuses = player.nourishment || INITIAL_NOURISHMENT;
-      const currentVal = currentBonuses[cfg.statKey];
+      const currentVal = currentBonuses[cfg.statKey] ?? 0;
 
       // Calculate how many can actually be consumed before hitting the cap
       const remainingCapacity = Math.max(0, cfg.maxBonus - currentVal);
@@ -583,9 +806,21 @@ export default function App() {
 
       // Apply bonus immediately to player stats
       setPlayer((prev) => {
+        const prevNourish = prev.nourishment || INITIAL_NOURISHMENT;
+        const prevCountForCrop =
+          prevNourish.consumedCounts?.[cropId] ??
+          (cfg.consumedKey ? prevNourish[cfg.consumedKey] : 0) ??
+          0;
         const nextNourishment = {
-          ...(prev.nourishment || INITIAL_NOURISHMENT),
+          ...prevNourish,
           [cfg.statKey]: nextVal,
+          consumedCounts: {
+            ...(prevNourish.consumedCounts || {}),
+            [cropId]: prevCountForCrop + actualConsumeCount,
+          },
+          ...(cfg.consumedKey
+            ? { [cfg.consumedKey]: (prevNourish[cfg.consumedKey] || 0) + actualConsumeCount }
+            : {}),
         };
 
         const updated: PlayerStats = {
@@ -593,8 +828,8 @@ export default function App() {
           nourishment: nextNourishment,
         };
 
-        // If carrot, increase maxHealth and restore health accordingly
-        if (cropId === 'carrot') {
+        // If crop boosts Max HP (Sweet Carrot, Watermelon, Crystal Fruit), increase maxHealth and restore health accordingly
+        if (cfg.statKey === 'maxHpBonus') {
           const newMaxHealth = Number((100 + nextVal).toFixed(1));
           updated.maxHealth = newMaxHealth;
           updated.health = Math.min(newMaxHealth, (prev.health || 100) + addedBonus);
@@ -613,6 +848,7 @@ export default function App() {
 
   // Enter Pet Den (Sanctuary)
   const handleEnterPetDen = useCallback(() => {
+    recordMissionEvent('visit_pet_den', 1);
     setIsWarpingTransition(true);
     soundEngine.playPortalWarp();
     window.setTimeout(() => {
@@ -621,7 +857,7 @@ export default function App() {
         setIsWarpingTransition(false);
       }, 350);
     }, 450);
-  }, []);
+  }, [recordMissionEvent]);
 
   // Leave Pet Den back to Farm
   const handleLeavePetDen = useCallback(() => {
@@ -647,10 +883,21 @@ export default function App() {
       handleAddInventory(cropId, -1);
       soundEngine.playHarvest();
 
+      const rarityExpMap: Record<string, number> = {
+        Common: 25,
+        Uncommon: 35,
+        Rare: 50,
+        Epic: 65,
+        Legendary: 80,
+        Mythical: 95,
+      };
+      const cropDef = CROPS[cropId];
+      const addedExp = cropId === 'pet_treat' ? 35 : cropDef ? rarityExpMap[cropDef.rarity] || 30 : 30;
+      const foodLabel = cropId === 'pet_treat' ? 'Pet Treat' : cropDef?.name || cropId;
+
       setPets((prev) =>
         prev.map((pet) => {
           if (pet.id === petId) {
-            const addedExp = 35;
             const newExp = pet.exp + addedExp;
             let newLevel = pet.level;
             let newMaxExp = pet.maxExp;
@@ -663,7 +910,7 @@ export default function App() {
               soundEngine.playLevelUp();
               showMessage(`✨ ${pet.name} leveled up to Lv ${newLevel}!`);
             } else {
-              showMessage(`Fed ${pet.name} fresh ${cropId}! (+35 EXP, +Happiness)`);
+              showMessage(`Fed ${pet.name} fresh ${foodLabel}! (+${addedExp} EXP, +Happiness)`);
             }
 
             return {
@@ -678,8 +925,11 @@ export default function App() {
           return pet;
         })
       );
+      recordMissionEvent('feed_pet', 1);
+      recordMissionEvent('interact_pet', 1, petId);
+      recordMissionEvent('gain_pet_exp', addedExp);
     },
-    [inventory, handleAddInventory, showMessage]
+    [inventory, handleAddInventory, showMessage, recordMissionEvent]
   );
 
   // Pet the Pet from Interaction Modal
@@ -719,17 +969,19 @@ export default function App() {
           return p;
         })
       );
+      recordMissionEvent('interact_pet', 1, petId);
+      recordMissionEvent('gain_pet_exp', 15);
     },
-    [pets, showMessage]
+    [pets, showMessage, recordMissionEvent]
   );
 
-  // Ensure pets.isFollowing always strictly matches player.equippedSkillSlots
+  // Ensure pets.isFollowing always strictly matches unlocked status and player.equippedSkillSlots
   useEffect(() => {
     const equippedSet = new Set(player.equippedSkillSlots.filter(Boolean) as string[]);
     setPets((prev) => {
       let changed = false;
       const next = prev.map((p) => {
-        const shouldFollow = equippedSet.has(p.id);
+        const shouldFollow = p.unlocked && equippedSet.has(p.id);
         if (p.isFollowing !== shouldFollow) {
           changed = true;
           return { ...p, isFollowing: shouldFollow };
@@ -738,7 +990,7 @@ export default function App() {
       });
       return changed ? next : prev;
     });
-  }, [player.equippedSkillSlots]);
+  }, [player.equippedSkillSlots, pets]);
 
   // Toggle Following from Interaction Modal (synchronizes equipped skill slots)
   const handleToggleFollowFromInteraction = useCallback(
@@ -775,6 +1027,7 @@ export default function App() {
       highestWaveCleared: 10,
       totalInstancesCleared: (prev.totalInstancesCleared || 0) + 1,
     }));
+    recordMissionEvent('complete_instance', 1);
 
     // Guaranteed random pet reward!
     const rollablePets = pets;
@@ -825,6 +1078,7 @@ export default function App() {
       equippedSkillSlots: ['pet_fox', 'pet_turtle', 'pet_rabbit', 'pet_owl', 'pet_bear'],
       highestWaveCleared: 0,
       totalInstancesCleared: 0,
+      nourishment: INITIAL_NOURISHMENT,
     });
     setPets(INITIAL_PETS);
     setFarmPlots(INITIAL_FARM_PLOTS);
@@ -846,9 +1100,6 @@ export default function App() {
       onTouchStart={handleUserInteract}
       className="relative w-full h-full overflow-hidden bg-sky-200 select-none font-sans"
     >
-      {/* Landscape Orientation Guidance Overlay */}
-      <LandscapeNotice onEnterFullscreen={toggleFullscreen} isFullscreen={isFullscreen} />
-
       {/* 3D WebGL Canvas Viewport */}
       <GameCanvas
         player={player}
@@ -865,7 +1116,6 @@ export default function App() {
         onNearInteractableChange={setNearInteractable}
         isZenMode={isZenMode}
         jumpCount={jumpCount}
-        camTurnDelta={camTurnDelta}
         currentLocation={currentLocation}
         onWaveInfoChange={setWaveInfo}
         onInstanceVictory={handleInstanceVictory}
@@ -890,6 +1140,8 @@ export default function App() {
         onPetsEngagedChange={setPetsEngagedCount}
         skillCooldowns={skillCooldowns}
         onTriggerSkill={handleTriggerSkill}
+        onMissionEvent={recordMissionEvent}
+        cameraAngleDeg={cameraAngleDeg}
       />
 
       {/* Main HUD overlay with 5 equipped skill slots and top bar */}
@@ -927,9 +1179,15 @@ export default function App() {
         onToggleAutoHunt={handleToggleAutoHunt}
         playerTargetInfo={playerTargetInfo}
         petsEngagedCount={petsEngagedCount}
+        onOpenMissions={() => {
+          syncMissionClock();
+          setShowMissionModal(true);
+        }}
+        unclaimedMissionCount={getUnclaimedMissionRewardsCount(missionState)}
+        missionToast={missionToast}
       />
 
-      {/* Mobile touch controls (Virtual Joystick, Action & Jump buttons, Camera turning) */}
+      {/* Mobile touch controls (Tap-anywhere Floating Joystick, Action & Jump buttons) */}
       <MobileControls
         onJoystickMove={setJoystickVector}
         onJump={() => setJumpCount((c) => c + 1)}
@@ -938,9 +1196,22 @@ export default function App() {
             nearInteractable.action();
           }
         }}
-        onCamTurn={setCamTurnDelta}
         hasInteractable={Boolean(nearInteractable)}
         isZenMode={isZenMode}
+        isModalOpen={Boolean(
+          showPetModal ||
+            showInventoryModal ||
+            showNourishmentModal ||
+            interactingPetId ||
+            showSettingsModal ||
+            showSeedShopModal ||
+            showSeedPickerModal ||
+            showEssenceShopModal ||
+            showPortalModal ||
+            showResultModal ||
+            showMissionModal ||
+            duplicateEvent
+        )}
       />
 
       {/* MODALS */}
@@ -953,6 +1224,7 @@ export default function App() {
           onUpdatePlayer={setPlayer}
           onShowMessage={showMessage}
           onEnterPetDen={handleEnterPetDen}
+          onMissionEvent={recordMissionEvent}
         />
       )}
 
@@ -965,6 +1237,17 @@ export default function App() {
           onUpdatePlayer={setPlayer}
           onShowMessage={showMessage}
           onConsumeCrop={handleConsumeCrop}
+          onMissionEvent={recordMissionEvent}
+        />
+      )}
+
+      {/* Daily & Weekly Mission Board Modal */}
+      {showMissionModal && (
+        <MissionBoardModal
+          missionState={missionState}
+          onClose={() => setShowMissionModal(false)}
+          onClaimMission={handleClaimMission}
+          onClaimMilestone={handleClaimMilestone}
         />
       )}
 
@@ -1006,6 +1289,8 @@ export default function App() {
           onSelectQuality={handleSelectQuality}
           showPerfStats={showPerfStats}
           onTogglePerfStats={handleTogglePerfStats}
+          cameraAngleDeg={cameraAngleDeg}
+          onChangeCameraAngleDeg={handleChangeCameraAngleDeg}
         />
       )}
 

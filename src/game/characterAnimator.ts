@@ -71,6 +71,7 @@ export interface PetAnimContext {
   basicAttackTotalDuration?: number;
   basicAttackPhase?: 'windup' | 'strike' | 'recovery';
   combatState?: string;
+  isPetDefeated?: boolean;
 }
 
 export interface FarmObstacle {
@@ -92,6 +93,7 @@ export const FARM_OBSTACLES: FarmObstacle[] = [
   { x: 25, z: 4, radius: 2.6, name: 'quarry_2' },
   { x: -11, z: -2, radius: 2.2, name: 'fox_den' },
   { x: 13.5, z: 0, radius: 3.4, name: 'pet_den' },
+  { x: -2.0, z: 14.0, radius: 3.2, name: 'training_station' },
 ];
 
 /**
@@ -419,6 +421,16 @@ export class PetAnimator {
     // Reset base transform
     petMesh.scale.lerp(_targetScale, Math.min(delta * 12, 1));
 
+    // Defeated state: collapsed resting pose, no locomotion or attacks
+    if (ctx.isPetDefeated) {
+      petMesh.position.y = THREE.MathUtils.damp(petMesh.position.y, 0.02, 10, delta);
+      petMesh.rotation.z = THREE.MathUtils.damp(petMesh.rotation.z, Math.PI * 0.42, 10, delta);
+      petMesh.rotation.x = THREE.MathUtils.damp(petMesh.rotation.x, 0, 10, delta);
+      petMesh.scale.set(1.04, 0.82, 1.04);
+      return;
+    }
+    petMesh.rotation.z = THREE.MathUtils.damp(petMesh.rotation.z, 0, 10, delta);
+
     switch (species) {
       case 'fox':
       case 'wolf':
@@ -438,6 +450,36 @@ export class PetAnimator {
         break;
       case 'bear':
         this.updateBear(petMesh, ctx, delta);
+        break;
+      case 'red_panda':
+        this.updateRedPanda(petMesh, ctx, delta);
+        break;
+      case 'timber_wolf':
+        this.updateTimberWolf(petMesh, ctx, delta);
+        break;
+      case 'sylvan_deer':
+        this.updateSylvanDeer(petMesh, ctx, delta);
+        break;
+      case 'penguin':
+        this.updatePenguin(petMesh, ctx, delta);
+        break;
+      case 'bat':
+        this.updateBat(petMesh, ctx, delta);
+        break;
+      case 'poison_frog':
+        this.updatePoisonFrog(petMesh, ctx, delta);
+        break;
+      case 'hedgehog':
+        this.updateHedgehog(petMesh, ctx, delta);
+        break;
+      case 'bee':
+        this.updateBee(petMesh, ctx, delta);
+        break;
+      case 'dragon_whelp':
+        this.updateDragonWhelp(petMesh, ctx, delta);
+        break;
+      case 'capybara':
+        this.updateCapybara(petMesh, ctx, delta);
         break;
       case 'slime':
       case 'frog':
@@ -1239,6 +1281,465 @@ export class PetAnimator {
         0.45 + Math.sin(orbAngle * 2) * 0.12,
         Math.sin(orbAngle) * 0.42
       );
+    }
+  }
+
+  // ----------------------------------------------------
+  // 7. RED PANDA: Agile bamboo prance & Quick Claw Swipe
+  // ----------------------------------------------------
+  private updateRedPanda(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { legs, head, tail } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.42;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      if (p < 0.35) {
+        const s = p / 0.35;
+        mesh.position.y = 0.08 * s;
+        mesh.rotation.x = -0.25 * s;
+        if (legs && legs.length >= 2) legs[0].rotation.x = -1.2 * s;
+      } else if (p < 0.7) {
+        const s = (p - 0.35) / 0.35;
+        const arc = Math.sin(s * Math.PI);
+        mesh.position.y = 0.12 * arc;
+        mesh.rotation.y = 0.45 * arc;
+        if (legs && legs.length >= 2) {
+          legs[0].rotation.x = THREE.MathUtils.lerp(-1.2, 1.35, s);
+          legs[0].rotation.z = -0.45 * arc;
+        }
+        if (tail) tail.rotation.y = 0.8 * arc;
+      } else {
+        const s = (p - 0.7) / 0.3;
+        mesh.rotation.y = THREE.MathUtils.lerp(0.25, 0, s);
+        mesh.rotation.x = 0;
+        mesh.position.y = 0;
+      }
+      return;
+    }
+
+    mesh.rotation.x = THREE.MathUtils.damp(mesh.rotation.x, 0, 10, delta);
+    mesh.rotation.y = THREE.MathUtils.damp(mesh.rotation.y, 0, 10, delta);
+    if (speed > 0.15) {
+      const t = anim * speed * 3.0;
+      const swing = Math.sin(t) * 0.75;
+      mesh.position.y = Math.abs(Math.sin(t)) * 0.1;
+      if (legs && legs.length >= 4) {
+        legs[0].rotation.x = swing;
+        legs[1].rotation.x = -swing;
+        legs[2].rotation.x = -swing;
+        legs[3].rotation.x = swing;
+      }
+      if (tail) tail.rotation.y = Math.sin(t * 0.8) * 0.4;
+    } else {
+      mesh.position.y = Math.sin(anim * 2.4) * 0.025;
+      if (head) head.rotation.y = Math.sin(anim * 1.4) * 0.2;
+      if (tail) tail.rotation.y = Math.sin(anim * 2.2) * 0.3;
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); l.rotation.z = THREE.MathUtils.damp(l.rotation.z, 0, 10, delta); });
+    }
+  }
+
+  // ----------------------------------------------------
+  // 8. TIMBER WOLF: Stalking stride & Snapping Bite
+  // ----------------------------------------------------
+  private updateTimberWolf(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { legs, head, tail } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.42;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      if (p < 0.3) {
+        const s = p / 0.3;
+        mesh.position.y = -0.06 * s;
+        if (head) head.rotation.x = -0.25 * s;
+      } else if (p < 0.65) {
+        const s = (p - 0.3) / 0.35;
+        const lunge = Math.sin(s * Math.PI);
+        mesh.position.y = 0.14 * lunge;
+        mesh.scale.set(0.9, 0.95, 1.28);
+        if (head) {
+          head.rotation.x = 0.45 * lunge;
+          head.position.z = 0.44 + 0.18 * lunge;
+        }
+      } else {
+        mesh.position.y = 0;
+        if (head) { head.rotation.x = 0; head.position.z = 0.44; }
+      }
+      return;
+    }
+
+    if (head) head.position.z = THREE.MathUtils.damp(head.position.z, 0.44, 12, delta);
+    if (speed > 0.15) {
+      const t = anim * speed * 3.1;
+      const swing = Math.sin(t) * 0.8;
+      mesh.position.y = Math.abs(Math.sin(t)) * 0.12;
+      if (legs && legs.length >= 4) {
+        legs[0].rotation.x = swing;
+        legs[1].rotation.x = swing * 0.85;
+        legs[2].rotation.x = -swing;
+        legs[3].rotation.x = -swing * 0.85;
+      }
+      if (tail) tail.rotation.y = Math.sin(t * 1.2) * 0.35;
+    } else {
+      mesh.position.y = Math.sin(anim * 2.0) * 0.02;
+      if (head) head.rotation.y = Math.sin(anim * 1.1) * 0.16;
+      if (tail) tail.rotation.y = Math.sin(anim * 2.6) * 0.25;
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); });
+    }
+  }
+
+  // ----------------------------------------------------
+  // 9. SYLVAN DEER: Graceful prance & Antler Strike
+  // ----------------------------------------------------
+  private updateSylvanDeer(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { legs, head, tail } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.48;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      if (p < 0.35) {
+        const s = p / 0.35;
+        if (head) head.rotation.x = 0.65 * s; // Lower antlers to aim
+        mesh.position.y = -0.05 * s;
+      } else if (p < 0.7) {
+        const s = (p - 0.35) / 0.35;
+        const thrust = Math.sin(s * Math.PI);
+        mesh.position.y = 0.2 * thrust;
+        if (head) head.rotation.x = THREE.MathUtils.lerp(0.65, -0.55, s); // Upward antler gore
+      } else {
+        mesh.position.y = 0;
+        if (head) head.rotation.x = 0;
+      }
+      return;
+    }
+
+    if (speed > 0.15) {
+      const t = anim * speed * 3.0;
+      const swing = Math.sin(t) * 0.72;
+      mesh.position.y = Math.abs(Math.sin(t)) * 0.14;
+      if (legs && legs.length >= 4) {
+        legs[0].rotation.x = swing;
+        legs[1].rotation.x = -swing;
+        legs[2].rotation.x = -swing;
+        legs[3].rotation.x = swing;
+      }
+      if (head) head.rotation.x = Math.sin(t) * 0.08;
+    } else {
+      mesh.position.y = Math.sin(anim * 1.9) * 0.02;
+      if (head) {
+        head.rotation.y = Math.sin(anim * 1.2) * 0.22;
+        head.rotation.x = THREE.MathUtils.damp(head.rotation.x, 0, 8, delta);
+      }
+      if (tail) tail.rotation.z = Math.sin(anim * 4.5) * 0.2;
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); });
+    }
+  }
+
+  // ----------------------------------------------------
+  // 10. PENGUIN: Cheerful waddle & Beak Strike
+  // ----------------------------------------------------
+  private updatePenguin(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { wings, legs, head } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.42;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      const jab = Math.sin(p * Math.PI);
+      mesh.rotation.x = 0.45 * jab;
+      mesh.position.y = 0.15 * jab;
+      if (wings && wings.length >= 2) {
+        wings[0].rotation.z = 0.25 + 0.9 * jab;
+        wings[1].rotation.z = -0.25 - 0.9 * jab;
+      }
+      if (head) head.rotation.x = 0.35 * jab;
+      return;
+    }
+
+    mesh.rotation.x = THREE.MathUtils.damp(mesh.rotation.x, 0, 10, delta);
+    if (speed > 0.15) {
+      const t = anim * speed * 3.4;
+      mesh.rotation.z = Math.sin(t) * 0.18;
+      mesh.position.y = Math.abs(Math.sin(t)) * 0.08;
+      if (wings && wings.length >= 2) {
+        wings[0].rotation.z = 0.3 + Math.sin(t) * 0.35;
+        wings[1].rotation.z = -0.3 - Math.sin(t) * 0.35;
+      }
+      if (legs && legs.length >= 2) {
+        legs[0].rotation.x = Math.sin(t) * 0.5;
+        legs[1].rotation.x = -Math.sin(t) * 0.5;
+      }
+    } else {
+      mesh.rotation.z = THREE.MathUtils.damp(mesh.rotation.z, Math.sin(anim * 2.2) * 0.04, 8, delta);
+      mesh.position.y = 0;
+      if (wings && wings.length >= 2) {
+        wings[0].rotation.z = 0.22 + Math.sin(anim * 3.2) * 0.12;
+        wings[1].rotation.z = -0.22 - Math.sin(anim * 3.2) * 0.12;
+      }
+      if (head) head.rotation.y = Math.sin(anim * 1.6) * 0.2;
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); });
+    }
+  }
+
+  // ----------------------------------------------------
+  // 11. BAT: Winged flight & Sonic Projectile Pulse
+  // ----------------------------------------------------
+  private updateBat(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { wings, head } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+    const baseY = 0.45;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.44;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      const pulse = Math.sin(p * Math.PI);
+      mesh.position.y = baseY + 0.18 * pulse;
+      mesh.rotation.x = 0.25 * pulse;
+      if (wings && wings.length >= 2) {
+        const snap = p < 0.4 ? -0.9 * (p / 0.4) : 0.85 * Math.sin(((p - 0.4) / 0.6) * Math.PI);
+        wings[0].rotation.z = snap;
+        wings[1].rotation.z = -snap;
+      }
+      if (head) head.rotation.x = 0.3 * pulse;
+      return;
+    }
+
+    mesh.rotation.x = THREE.MathUtils.damp(mesh.rotation.x, 0, 10, delta);
+    const flapSpeed = speed > 0.15 ? 16 : 9;
+    const flap = Math.sin(anim * flapSpeed) * 0.72;
+    mesh.position.y = baseY + Math.sin(anim * 4.5) * 0.12;
+    if (wings && wings.length >= 2) {
+      wings[0].rotation.z = flap;
+      wings[1].rotation.z = -flap;
+    }
+    if (head) head.rotation.y = Math.sin(anim * 2.0) * 0.15;
+  }
+
+  // ----------------------------------------------------
+  // 12. POISON FROG: Bouncy hop & Tongue Strike
+  // ----------------------------------------------------
+  private updatePoisonFrog(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { legs, head, tail: tongue } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.44;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      const snap = Math.sin(p * Math.PI);
+      mesh.position.y = 0.18 * snap;
+      mesh.scale.set(1.0 - 0.15 * snap, 1.0 + 0.2 * snap, 1.0 + 0.2 * snap);
+      if (head) head.rotation.x = -0.2 * snap;
+      if (tongue) {
+        tongue.scale.z = 1 + snap * 9.5;
+        tongue.position.z = 0.16 + snap * 0.55;
+      }
+      return;
+    }
+
+    if (tongue) {
+      tongue.scale.z = THREE.MathUtils.damp(tongue.scale.z, 1, 14, delta);
+      tongue.position.z = THREE.MathUtils.damp(tongue.position.z, 0.16, 14, delta);
+    }
+    if (speed > 0.15) {
+      const t = anim * speed * 3.0;
+      const hop = Math.max(0, Math.sin(t));
+      mesh.position.y = hop * 0.34;
+      mesh.scale.set(1.0 - hop * 0.12, 1.0 + hop * 0.22, 1.0 - hop * 0.1);
+      if (legs && legs.length >= 4) {
+        legs[2].rotation.x = hop * 0.9;
+        legs[3].rotation.x = hop * 0.9;
+      }
+    } else {
+      const croak = Math.sin(anim * 3.0);
+      mesh.position.y = 0;
+      mesh.scale.set(1.0 + croak * 0.05, 1.0 - croak * 0.04, 1.0 + croak * 0.05);
+      if (head) head.rotation.y = Math.sin(anim * 1.4) * 0.18;
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); });
+    }
+  }
+
+  // ----------------------------------------------------
+  // 13. HEDGEHOG: Brisk scuttle & Short Headbutt
+  // ----------------------------------------------------
+  private updateHedgehog(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { legs, head } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.44;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      const ram = Math.sin(p * Math.PI);
+      mesh.rotation.x = 0.42 * ram;
+      mesh.position.y = 0.12 * ram;
+      if (head) head.position.z = 0.32 + 0.12 * ram;
+      return;
+    }
+
+    mesh.rotation.x = THREE.MathUtils.damp(mesh.rotation.x, 0, 10, delta);
+    if (head) head.position.z = THREE.MathUtils.damp(head.position.z, 0.32, 10, delta);
+    if (speed > 0.15) {
+      const t = anim * speed * 4.5;
+      mesh.position.y = Math.abs(Math.sin(t)) * 0.05;
+      if (legs && legs.length >= 4) {
+        const s = Math.sin(t) * 0.65;
+        legs[0].rotation.x = s;
+        legs[1].rotation.x = -s;
+        legs[2].rotation.x = -s;
+        legs[3].rotation.x = s;
+      }
+    } else {
+      mesh.position.y = Math.sin(anim * 3.0) * 0.015;
+      if (head) head.rotation.y = Math.sin(anim * 2.5) * 0.22;
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); });
+    }
+  }
+
+  // ----------------------------------------------------
+  // 14. BEE: Darting buzz & Honey Projectile
+  // ----------------------------------------------------
+  private updateBee(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { wings, head } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+    const baseY = 0.32;
+
+    if (wings && wings.length >= 2) {
+      const buzz = Math.sin(anim * 45) * 0.42;
+      wings[0].rotation.z = buzz;
+      wings[1].rotation.z = -buzz;
+    }
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.38;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      const pitch = Math.sin(p * Math.PI);
+      mesh.rotation.x = 0.35 * pitch;
+      mesh.position.y = baseY + 0.14 * pitch;
+      return;
+    }
+
+    mesh.rotation.x = THREE.MathUtils.damp(mesh.rotation.x, speed > 0.15 ? 0.2 : 0, 8, delta);
+    mesh.position.y = baseY + Math.sin(anim * 6.0 + ctx.slotIndex) * 0.09;
+    if (head) head.rotation.y = Math.sin(anim * 3.2) * 0.12;
+  }
+
+  // ----------------------------------------------------
+  // 15. DRAGON WHELP: Fiery strut & Small Fireball
+  // ----------------------------------------------------
+  private updateDragonWhelp(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { legs, wings, head, tail } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.48;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      if (p < 0.35) {
+        const s = p / 0.35;
+        if (head) head.rotation.x = -0.45 * s; // Inhale rear-back
+        if (wings && wings.length >= 2) {
+          wings[0].rotation.z = -0.8 * s;
+          wings[1].rotation.z = 0.8 * s;
+        }
+      } else {
+        const s = (p - 0.35) / 0.65;
+        const spit = Math.sin(s * Math.PI);
+        if (head) head.rotation.x = 0.38 * spit;
+        if (wings && wings.length >= 2) {
+          wings[0].rotation.z = 0.55 * spit;
+          wings[1].rotation.z = -0.55 * spit;
+        }
+      }
+      return;
+    }
+
+    if (speed > 0.15) {
+      const t = anim * speed * 2.8;
+      mesh.position.y = Math.abs(Math.sin(t)) * 0.14;
+      if (wings && wings.length >= 2) {
+        const f = Math.sin(anim * 12) * 0.55;
+        wings[0].rotation.z = f;
+        wings[1].rotation.z = -f;
+      }
+      if (legs && legs.length >= 4) {
+        const sw = Math.sin(t) * 0.65;
+        legs[0].rotation.x = sw;
+        legs[1].rotation.x = -sw;
+        legs[2].rotation.x = -sw;
+        legs[3].rotation.x = sw;
+      }
+    } else {
+      mesh.position.y = Math.sin(anim * 2.5) * 0.04;
+      if (wings && wings.length >= 2) {
+        const f = Math.sin(anim * 4.5) * 0.25;
+        wings[0].rotation.z = -0.2 + f;
+        wings[1].rotation.z = 0.2 - f;
+      }
+      if (head) {
+        head.rotation.y = Math.sin(anim * 1.5) * 0.22;
+        head.rotation.x = THREE.MathUtils.damp(head.rotation.x, 0, 8, delta);
+      }
+      if (tail) tail.rotation.y = Math.sin(anim * 2.8) * 0.25;
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); });
+    }
+  }
+
+  // ----------------------------------------------------
+  // 16. CAPYBARA: Serene loaf trot & Gentle Body Bump
+  // ----------------------------------------------------
+  private updateCapybara(mesh: PetMeshGroup, ctx: PetAnimContext, delta: number) {
+    const ud = mesh.userData;
+    const { legs, head } = ud;
+    const anim = ctx.animTime;
+    const speed = ctx.speed;
+
+    if (ctx.isBasicAttacking && (ctx.basicAttackTimer || 0) > 0) {
+      const dur = ctx.basicAttackTotalDuration || 0.5;
+      const p = THREE.MathUtils.clamp(1 - (ctx.basicAttackTimer || 0) / dur, 0, 1);
+      const bump = Math.sin(p * Math.PI);
+      mesh.position.y = 0.1 * bump;
+      mesh.rotation.z = 0.22 * bump;
+      mesh.scale.set(1.12 * bump + (1 - bump), 1.0 - 0.08 * bump, 1.0 + 0.1 * bump);
+      if (head) head.rotation.z = -0.15 * bump;
+      return;
+    }
+
+    mesh.rotation.z = THREE.MathUtils.damp(mesh.rotation.z, 0, 10, delta);
+    if (speed > 0.15) {
+      const t = anim * speed * 2.4;
+      mesh.position.y = Math.abs(Math.sin(t)) * 0.06;
+      if (legs && legs.length >= 4) {
+        const sw = Math.sin(t) * 0.55;
+        legs[0].rotation.x = sw;
+        legs[1].rotation.x = -sw;
+        legs[2].rotation.x = -sw;
+        legs[3].rotation.x = sw;
+      }
+    } else {
+      mesh.position.y = Math.sin(anim * 1.4) * 0.015;
+      if (head) {
+        head.rotation.y = Math.sin(anim * 0.8) * 0.12;
+        head.rotation.z = THREE.MathUtils.damp(head.rotation.z, 0, 10, delta);
+      }
+      if (legs) legs.forEach((l) => { l.rotation.x = THREE.MathUtils.damp(l.rotation.x, 0, 10, delta); });
     }
   }
 }

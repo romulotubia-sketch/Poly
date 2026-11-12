@@ -10,13 +10,14 @@ import {
   Check,
   CheckCircle2,
   Award,
-  ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Lock,
 } from 'lucide-react';
-import { PetData, PlayerStats } from '../types/game';
+import { PetData, PlayerStats, MissionEventType } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 import { getSkillLevelBonus } from '../game/constants';
-import { PET_COMBAT_CONFIGS } from '../game/combatSkills';
+import { PET_COMBAT_CONFIGS, getPetBasicAttackConfig } from '../game/combatSkills';
 
 interface PetModalProps {
   pets: PetData[];
@@ -26,6 +27,7 @@ interface PetModalProps {
   onUpdatePlayer: (updater: (prev: PlayerStats) => PlayerStats) => void;
   onShowMessage: (msg: string) => void;
   onEnterPetDen?: () => void;
+  onMissionEvent?: (eventType: MissionEventType, amount?: number, trackKey?: string) => void;
 }
 
 export const PetModal: React.FC<PetModalProps> = ({
@@ -36,12 +38,20 @@ export const PetModal: React.FC<PetModalProps> = ({
   onUpdatePlayer,
   onShowMessage,
   onEnterPetDen,
+  onMissionEvent,
 }) => {
   const [selectedPetId, setSelectedPetId] = useState<string>(pets[0]?.id || 'pet_fox');
+  const [expandedSkillsPetId, setExpandedSkillsPetId] = useState<string | null>(null);
+  const [equipPickerPetId, setEquipPickerPetId] = useState<string | null>(null);
   const selectedPet = pets.find((p) => p.id === selectedPetId) || pets[0];
 
   // Helper to equip a pet into a specific slot (0-4) and automatically synchronize following squad
   const handleEquipSlot = (slotIndex: number, petId: string) => {
+    const targetPet = pets.find((p) => p.id === petId);
+    if (!targetPet || !targetPet.unlocked) {
+      onShowMessage(`🔒 Unlock ${targetPet?.name || 'this pet'} first via Wild Grounds or Essence Shop!`);
+      return;
+    }
     const newSlots = [...player.equippedSkillSlots];
     const existingIdx = newSlots.indexOf(petId);
     if (existingIdx !== -1 && existingIdx !== slotIndex) {
@@ -50,10 +60,10 @@ export const PetModal: React.FC<PetModalProps> = ({
 
     if (newSlots[slotIndex] === petId) {
       newSlots[slotIndex] = null;
-      onShowMessage(`Unequipped ${selectedPet.name} from Slot ${slotIndex + 1}.`);
+      onShowMessage(`Unequipped ${targetPet.name} from Slot ${slotIndex + 1}.`);
     } else {
       newSlots[slotIndex] = petId;
-      onShowMessage(`Equipped ${selectedPet.name} to Slot ${slotIndex + 1}! Now following you!`);
+      onShowMessage(`Equipped ${targetPet.name} to Slot ${slotIndex + 1}! Now following you!`);
     }
 
     onUpdatePlayer((prev) => ({ ...prev, equippedSkillSlots: newSlots }));
@@ -61,7 +71,7 @@ export const PetModal: React.FC<PetModalProps> = ({
     onUpdatePets((prev) =>
       prev.map((p) => ({
         ...p,
-        isFollowing: equippedIds.has(p.id),
+        isFollowing: p.unlocked && equippedIds.has(p.id),
       }))
     );
     soundEngine.playHarvest();
@@ -69,13 +79,18 @@ export const PetModal: React.FC<PetModalProps> = ({
 
   // Toggle follow status: automatically equips or unequips the pet in the squad
   const handleToggleFollow = (petId: string) => {
+    const targetPet = pets.find((p) => p.id === petId);
+    if (!targetPet || !targetPet.unlocked) {
+      onShowMessage(`🔒 Unlock ${targetPet?.name || 'this pet'} first via Wild Grounds or Essence Shop!`);
+      return;
+    }
     const isCurrentlyEquipped = player.equippedSkillSlots.includes(petId);
     let newSlots = [...player.equippedSkillSlots];
 
     if (isCurrentlyEquipped) {
       // Unequip from all slots
       newSlots = newSlots.map((id) => (id === petId ? null : id));
-      onShowMessage(`${selectedPet.name} returned to resting at the Pet Den.`);
+      onShowMessage(`${targetPet.name} returned to resting at the Pet Den.`);
     } else {
       // Equip into first open slot, or slot 4 if full
       const emptyIdx = newSlots.indexOf(null);
@@ -84,7 +99,7 @@ export const PetModal: React.FC<PetModalProps> = ({
       } else {
         newSlots[newSlots.length - 1] = petId;
       }
-      onShowMessage(`${selectedPet.name} is now equipped and following you!`);
+      onShowMessage(`${targetPet.name} is now equipped and following you!`);
     }
 
     onUpdatePlayer((prev) => ({ ...prev, equippedSkillSlots: newSlots }));
@@ -92,13 +107,18 @@ export const PetModal: React.FC<PetModalProps> = ({
     onUpdatePets((prev) =>
       prev.map((p) => ({
         ...p,
-        isFollowing: equippedIds.has(p.id),
+        isFollowing: p.unlocked && equippedIds.has(p.id),
       }))
     );
     soundEngine.playPetJoy();
   };
 
   const handleFeedPet = (petId: string) => {
+    const targetPet = pets.find((p) => p.id === petId);
+    if (!targetPet || !targetPet.unlocked) {
+      onShowMessage(`🔒 Unlock ${targetPet?.name || 'this pet'} first before feeding!`);
+      return;
+    }
     soundEngine.playPetJoy();
     onUpdatePets((prev) =>
       prev.map((p) => {
@@ -124,10 +144,18 @@ export const PetModal: React.FC<PetModalProps> = ({
         return p;
       })
     );
-    onShowMessage(`Fed ${selectedPet.name} a sweet treat! (+Hunger, +EXP)`);
+    onShowMessage(`Fed ${targetPet.name} a sweet treat! (+Hunger, +EXP)`);
+    onMissionEvent?.('feed_pet', 1);
+    onMissionEvent?.('interact_pet', 1, petId);
+    onMissionEvent?.('gain_pet_exp', 35);
   };
 
   const handlePetPlay = (petId: string) => {
+    const targetPet = pets.find((p) => p.id === petId);
+    if (!targetPet || !targetPet.unlocked) {
+      onShowMessage(`🔒 Unlock ${targetPet?.name || 'this pet'} first before playing!`);
+      return;
+    }
     soundEngine.playPetJoy();
     onUpdatePets((prev) =>
       prev.map((p) => {
@@ -152,7 +180,9 @@ export const PetModal: React.FC<PetModalProps> = ({
         return p;
       })
     );
-    onShowMessage(`Patted and played with ${selectedPet.name}! (+Happiness, +EXP)`);
+    onShowMessage(`Patted and played with ${targetPet.name}! (+Happiness, +EXP)`);
+    onMissionEvent?.('interact_pet', 1, petId);
+    onMissionEvent?.('gain_pet_exp', 25);
   };
 
   const isEquipped = player.equippedSkillSlots.includes(selectedPet.id);
@@ -220,76 +250,200 @@ export const PetModal: React.FC<PetModalProps> = ({
         </div>
 
         {/* Modal Body: Left column list, Right column details */}
-        <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-12 gap-4 p-4 md:p-6">
-          {/* Pets Roster List (4 cols) */}
-          <div className="md:col-span-5 flex flex-col gap-2.5">
-            <h3 className="text-xs font-semibold text-stone-400 uppercase tracking-wider px-1">Your Haven Pets</h3>
+        <div className="flex-1 overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-4 p-4 md:p-6">
+          {/* Pets Roster List (5 cols) */}
+          <div className="md:col-span-5 flex flex-col gap-2.5 md:overflow-y-auto md:pr-1">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
+                Your Haven Pets ({pets.filter((p) => p.unlocked).length}/{pets.length})
+              </h3>
+              <span className="text-[10px] text-stone-400">Tap name for skills</span>
+            </div>
             {pets.map((pet) => {
               const isSelected = pet.id === selectedPetId;
-              const isSlotEquipped = player.equippedSkillSlots.includes(pet.id);
+              const equippedIdx = player.equippedSkillSlots.indexOf(pet.id);
+              const isSlotEquipped = equippedIdx !== -1;
+              const isSkillsOpen = expandedSkillsPetId === pet.id;
+              const isPickerOpen = equipPickerPetId === pet.id;
 
               return (
                 <div
                   key={pet.id}
-                  onClick={() => setSelectedPetId(pet.id)}
-                  className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                  onClick={() => {
+                    setSelectedPetId(pet.id);
+                    setExpandedSkillsPetId((prev) => (prev === pet.id ? null : pet.id));
+                  }}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
                     isSelected
                       ? 'bg-amber-950/40 border-amber-500 shadow-md ring-1 ring-amber-500/50'
                       : 'bg-stone-900/50 border-stone-800 hover:border-stone-700 hover:bg-stone-900/80'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-11 h-11 rounded-2xl flex items-center justify-center text-lg font-bold shadow-md border border-white/20"
-                      style={{ backgroundColor: pet.color }}
-                    >
-                      {pet.name[0]}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-stone-100">{pet.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-800 text-amber-300 font-semibold">
-                          Lv.{pet.level}
-                        </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-10 h-10 shrink-0 rounded-2xl flex items-center justify-center text-base font-bold shadow-md border border-white/20"
+                        style={{ backgroundColor: pet.color }}
+                      >
+                        {pet.name[0]}
                       </div>
-                      <span className="text-[11px] text-stone-400 capitalize">{pet.species}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-sm text-stone-100 truncate">{pet.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-800 text-amber-300 font-semibold">
+                            Lv.{pet.level}
+                          </span>
+                          <span className="text-stone-400 inline-flex items-center">
+                            {isSkillsOpen ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-amber-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-stone-500" />
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-[11px] text-stone-400 capitalize">
+                            {pet.species.replace(/_/g, ' ')}
+                          </span>
+                          {(pet.role || PET_COMBAT_CONFIGS[pet.id]?.role) && (
+                            <span className="text-[9.5px] text-sky-300/90 bg-sky-950/60 border border-sky-700/40 px-1.5 py-0.2 rounded-full">
+                              {pet.role || PET_COMBAT_CONFIGS[pet.id]?.role}
+                            </span>
+                          )}
+                          {pet.unlocked && isSlotEquipped && (
+                            <span className="text-[10px] bg-emerald-950 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.2 rounded-full font-semibold">
+                              Slot {equippedIdx + 1}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Equip Button Right Next to Pet Name */}
+                    <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {!pet.unlocked ? (
+                        <span className="text-[10px] bg-stone-800 border border-stone-700 text-stone-400 px-2.5 py-1.5 rounded-xl font-medium flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> Locked
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPetId(pet.id);
+                            setEquipPickerPetId((prev) => (prev === pet.id ? null : pet.id));
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer active:scale-95 ${
+                            isPickerOpen
+                              ? 'bg-amber-500 text-stone-950 border-amber-300 shadow'
+                              : isSlotEquipped
+                              ? 'bg-amber-950/80 hover:bg-amber-900/90 text-amber-200 border-amber-500/60'
+                              : 'bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-500/60 shadow'
+                          }`}
+                        >
+                          {isPickerOpen ? 'Close' : isSlotEquipped ? 'Change Slot' : 'Equip'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-1">
-                    {pet.isFollowing && (
-                      <span className="text-[10px] bg-emerald-950 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-full font-medium">
-                        Following
-                      </span>
-                    )}
-                    {isSlotEquipped && (
-                      <span className="text-[10px] bg-amber-950 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded-full font-medium">
-                        Skill Equipped
-                      </span>
-                    )}
-                  </div>
+                  {/* Inline Slot Picker Dropdown (shown when tapping Equip next to pet name) */}
+                  {pet.unlocked && isPickerOpen && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-stone-950/90 border border-amber-500/50 rounded-xl p-2.5 space-y-2"
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-amber-300">Equip {pet.name} to which slot?</span>
+                        <span className="text-[10px] text-stone-400">Tap slot to assign</span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {[0, 1, 2, 3, 4].map((slotIdx) => {
+                          const occupantId = player.equippedSkillSlots[slotIdx];
+                          const isThisPet = occupantId === pet.id;
+                          const occupantPet = pets.find((p) => p.id === occupantId);
+
+                          return (
+                            <button
+                              key={slotIdx}
+                              type="button"
+                              onClick={() => {
+                                handleEquipSlot(slotIdx, pet.id);
+                                setEquipPickerPetId(null);
+                              }}
+                              className={`py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                                isThisPet
+                                  ? 'bg-amber-500 text-stone-950 border-amber-300 font-black shadow'
+                                  : occupantPet
+                                  ? 'bg-stone-800/90 hover:bg-stone-700 text-stone-200 border-stone-600'
+                                  : 'bg-stone-900 hover:bg-emerald-950/70 text-emerald-300 border-dashed border-emerald-600/60'
+                              }`}
+                            >
+                              <span className="text-[10px] font-bold">Slot {slotIdx + 1}</span>
+                              <span className="text-[9px] truncate max-w-full opacity-90">
+                                {isThisPet ? 'Remove' : occupantPet ? occupantPet.name : 'Empty'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Inline Revealed Skills (shown when tapping pet name) */}
+                  {isSkillsOpen && (
+                    <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-2.5 space-y-2 text-left">
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                          <span className="flex items-center gap-1">
+                            <Zap className="w-3 h-3 text-amber-400" />
+                            {pet.activeSkill.name}
+                          </span>
+                          <span className="text-[9.5px] font-normal text-stone-400">
+                            {pet.activeSkill.cooldown}s CD
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] text-stone-300 leading-snug mt-0.5">
+                          {pet.activeSkill.description}
+                        </p>
+                      </div>
+                      <div className="pt-1.5 border-t border-stone-800/80">
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-300">
+                          <Shield className="w-3 h-3 text-emerald-400" />
+                          <span>{pet.passiveSkill.name} (Passive)</span>
+                        </div>
+                        <p className="text-[10.5px] text-stone-300 leading-snug mt-0.5">
+                          {pet.passiveSkill.description}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
 
           {/* Selected Pet Detailed Card (7 cols) */}
-          <div className="md:col-span-7 flex flex-col gap-4 bg-stone-900/70 border border-stone-800 rounded-3xl p-5">
+          <div className="md:col-span-7 flex flex-col gap-4 bg-stone-900/70 border border-stone-800 rounded-3xl p-5 md:overflow-y-auto">
             {/* Top Info Banner */}
             <div className="flex items-start justify-between pb-3 border-b border-stone-800">
               <div className="flex items-center gap-3.5">
                 <div
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-black shadow-lg border-2 border-white/30"
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-black shadow-lg border-2 border-white/30 shrink-0"
                   style={{ backgroundColor: selectedPet.color }}
                 >
                   {selectedPet.name[0]}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-xl font-bold text-white">{selectedPet.name}</h3>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold">
                       {selectedPet.rarity}
                     </span>
+                    {(selectedPet.role || PET_COMBAT_CONFIGS[selectedPet.id]?.role) && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-sky-950/80 text-sky-300 border border-sky-500/40 font-semibold">
+                        {selectedPet.role || PET_COMBAT_CONFIGS[selectedPet.id]?.role}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-stone-400 max-w-sm mt-0.5 leading-relaxed">{selectedPet.description}</p>
                 </div>
@@ -432,6 +586,27 @@ export const PetModal: React.FC<PetModalProps> = ({
                     : getSkillLevelBonus(selectedPet.passiveSkill.id, selectedPet.level)}
                 </div>
               </div>
+
+              {/* Basic Attack Breakdown */}
+              {(() => {
+                const basicCfg = getPetBasicAttackConfig(selectedPet.species);
+                return (
+                  <div className="bg-stone-950/60 rounded-2xl p-3.5 border border-sky-600/30">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-1.5 text-sky-300 font-bold text-xs">
+                        <span>⚔️ BASIC ATTACK: {basicCfg.name}</span>
+                      </div>
+                      <span className="text-[10px] text-sky-200 bg-sky-950/80 border border-sky-600/40 px-2 py-0.5 rounded-full font-semibold">
+                        {basicCfg.isRanged ? 'Ranged' : 'Melee'} • {basicCfg.attackInterval.toFixed(2)}s
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-300 leading-relaxed">
+                      Attack Range: <strong className="text-sky-200">{basicCfg.attackRange.toFixed(1)}m</strong> • Power Scaling:{' '}
+                      <strong className="text-sky-200">{Math.round(basicCfg.damageMultiplier * 100)}%</strong>. Used autonomously in Wild Grounds while invulnerable.
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Level-Based Skill Milestones Matrix (Lv 1, 10, 20, 30, 40, 50) */}
               {PET_COMBAT_CONFIGS[selectedPet.id] && (

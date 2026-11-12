@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Volume2, Music, RotateCcw, Smartphone, Maximize, Activity, Zap, ShieldAlert } from 'lucide-react';
+import { X, Volume2, Music, RotateCcw, Smartphone, Maximize, Activity, Zap, Camera } from 'lucide-react';
 import { soundEngine } from '../audio/soundEngine';
 import { GraphicsQuality } from '../types/game';
 
@@ -13,6 +13,8 @@ interface SettingsModalProps {
   onSelectQuality: (q: GraphicsQuality) => void;
   showPerfStats: boolean;
   onTogglePerfStats: () => void;
+  cameraAngleDeg: number;
+  onChangeCameraAngleDeg: (deg: number) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -25,6 +27,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSelectQuality,
   showPerfStats,
   onTogglePerfStats,
+  cameraAngleDeg,
+  onChangeCameraAngleDeg,
 }) => {
   const [sfxVolume, setSfxVolume] = useState(0.8);
   const [musicPlaying, setMusicPlaying] = useState(true);
@@ -134,6 +138,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {/* Camera Angle Settings */}
+          <div>
+            <h3 className="text-[11px] font-bold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Camera className="w-3.5 h-3.5 text-amber-400" /> Bird-View Camera Angle
+            </h3>
+            <div className="bg-stone-900/70 border border-stone-800 rounded-2xl p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-stone-200">Fixed Overhead Pitch</h4>
+                  <p className="text-[10px] text-stone-400">
+                    Camera stays locked in wide bird's-eye view (non-draggable)
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-xl bg-amber-950/80 border border-amber-500/40 text-amber-300 font-black text-xs">
+                  {cameraAngleDeg}°
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <input
+                  type="range"
+                  min={35}
+                  max={82}
+                  step={1}
+                  value={cameraAngleDeg}
+                  onChange={(e) => onChangeCameraAngleDeg(parseInt(e.target.value, 10))}
+                  className="w-full accent-amber-500 bg-stone-800 rounded-lg h-2 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-stone-500 font-semibold">
+                  <span>35° (Wide Angled)</span>
+                  <span>82° (Top-Down)</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { label: 'Angled', deg: 45 },
+                  { label: 'High', deg: 55 },
+                  { label: 'Bird', deg: 62 },
+                  { label: 'Top', deg: 78 },
+                ].map((preset) => (
+                  <button
+                    key={preset.deg}
+                    onClick={() => onChangeCameraAngleDeg(preset.deg)}
+                    className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                      cameraAngleDeg === preset.deg
+                        ? 'bg-amber-600 border-amber-400 text-white shadow'
+                        : 'bg-stone-800/80 border-stone-700 text-stone-300 hover:bg-stone-800'
+                    }`}
+                  >
+                    {preset.label} ({preset.deg}°)
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Display & Fullscreen */}
           <div>
             <h3 className="text-[11px] font-bold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -142,7 +203,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="bg-stone-900/70 border border-stone-800 rounded-2xl p-3 flex items-center justify-between">
               <div>
                 <h4 className="font-bold text-stone-200">Mobile Fullscreen Mode</h4>
-                <p className="text-[10px] text-stone-400">Play in edge-to-edge landscape</p>
+                <p className="text-[10px] text-stone-400">Play in edge-to-edge portrait mode</p>
               </div>
               <button
                 onClick={onToggleFullscreen}
@@ -203,16 +264,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </h3>
             <div className="bg-stone-900/70 border border-stone-800 rounded-2xl p-3 space-y-2">
               <div className="flex items-center justify-between border-b border-stone-800/80 pb-1.5">
-                <span className="text-stone-300">Left Joystick</span>
-                <span className="font-semibold text-amber-300">Walk & Run</span>
+                <span className="text-stone-300">Tap Empty Space</span>
+                <span className="font-semibold text-amber-300">Floating Joystick Appears (Walk)</span>
               </div>
               <div className="flex items-center justify-between border-b border-stone-800/80 pb-1.5">
-                <span className="text-stone-300">Right Screen Drag / Arrows</span>
-                <span className="font-semibold text-amber-300">Rotate Camera View</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-stone-800/80 pb-1.5">
-                <span className="text-stone-300">Two-Finger Pinch</span>
-                <span className="font-semibold text-amber-300">Zoom Camera</span>
+                <span className="text-stone-300">Camera View</span>
+                <span className="font-semibold text-amber-300">Fixed Bird View (35°–82° in Settings)</span>
               </div>
               <div className="flex items-center justify-between border-b border-stone-800/80 pb-1.5">
                 <span className="text-stone-300">Green JUMP Button</span>
